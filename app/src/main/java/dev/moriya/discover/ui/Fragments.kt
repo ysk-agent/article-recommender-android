@@ -42,7 +42,12 @@ class ListScaffold(context: android.content.Context) {
         visibility = View.GONE
     }
 
-    init { root.addView(recycler); root.addView(emptyText); root.addView(footer) }
+    init {
+        root.setBackgroundColor(context.colBg())
+        emptyText.setTextColor(context.colTextSub())
+        footer.setTextColor(context.colTextSub())
+        root.addView(recycler); root.addView(emptyText); root.addView(footer)
+    }
 
     fun showEmpty(message: String?) {
         if (message == null) { emptyText.visibility = View.GONE }
@@ -133,14 +138,16 @@ class TextRowAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val ctx = parent.context
-        val line1 = ctx.textView(sizeSp = 14f, bold = true)
-        val line2 = ctx.textView(sizeSp = 13f, maxLines = 2).apply { setPadding(0, ctx.dp(2), 0, 0) }
-        val line3 = ctx.textView(sizeSp = 12f).apply { setPadding(0, ctx.dp(2), 0, 0) }
+        val line1 = ctx.textView(sizeSp = 14f, bold = true, color = ctx.colText())
+        val line2 = ctx.textView(sizeSp = 13f, maxLines = 2, color = ctx.colTextSub()).apply { setPadding(0, ctx.dp(2), 0, 0) }
+        val line3 = ctx.textView(sizeSp = 12f, color = ctx.colTextSub()).apply { setPadding(0, ctx.dp(2), 0, 0) }
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = RecyclerView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setPadding(ctx.dp(14), ctx.dp(10), ctx.dp(14), ctx.dp(10))
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(ctx.dp(12), ctx.dp(5), ctx.dp(12), ctx.dp(5)) }
+            background = ctx.roundedBg(ctx.colSurface(), 16, ctx.colBorder())
+            setPadding(ctx.dp(14), ctx.dp(12), ctx.dp(14), ctx.dp(12))
             addView(line1); addView(line2); addView(line3)
         }
         return VH(root, line1, line2, line3)

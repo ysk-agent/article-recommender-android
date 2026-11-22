@@ -23,11 +23,11 @@ class SourceSheet : DialogFragment() {
         val sourceName = requireArguments().getString("sourceName")!!
         val ctx = requireContext()
 
-        val nameView = ctx.textView(sourceName, 17f, bold = true)
-        val stateView = ctx.textView(sizeSp = 13f).apply { setPadding(0, ctx.dp(4), 0, 0) }
-        val followBtn = Button(ctx).apply { isAllCaps = false; layoutParams = matchWrap(ctx, top = 12) }
-        val blockBtn = Button(ctx).apply { isAllCaps = false; layoutParams = matchWrap(ctx, top = 6) }
-        val openBtn = Button(ctx).apply { isAllCaps = false;
+        val nameView = ctx.textView(sourceName, 17f, bold = true, color = ctx.colText())
+        val stateView = ctx.textView(sizeSp = 13f, color = ctx.colTextSub()).apply { setPadding(0, ctx.dp(4), 0, 0) }
+        val followBtn = Button(ctx).apply { stylePrimary(ctx); layoutParams = matchWrap(ctx, top = 12) }
+        val blockBtn = Button(ctx).apply { styleOutline(ctx); layoutParams = matchWrap(ctx, top = 6) }
+        val openBtn = Button(ctx).apply { styleOutline(ctx);
             text = "媒体ページを開く"; layoutParams = matchWrap(ctx, top = 6)
         }
         val root = LinearLayout(ctx).apply {

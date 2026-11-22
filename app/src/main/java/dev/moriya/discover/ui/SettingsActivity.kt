@@ -38,12 +38,12 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(dp(16), dp(16), dp(16), dp(16))
         }
         fun section(titleText: String) {
-            column.addView(textView(titleText, 16f, bold = true).apply {
+            column.addView(textView(titleText, 16f, bold = true, color = colText()).apply {
                 setPadding(0, dp(18), 0, dp(6))
             })
         }
         fun body(text: String) {
-            column.addView(textView(text, 13f))
+            column.addView(textView(text, 13f, color = colTextSub()))
         }
         fun matchWrap(top: Int = 8) = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
@@ -52,9 +52,11 @@ class SettingsActivity : AppCompatActivity() {
         // -- exploration share (§5b) -----------------------------------
         section("探索の割合")
         body("新しい話題や媒体をフィードに混ぜる割合です。次のフィード生成から適用されます。0%（探索なし）も選べます。")
-        val shareLabel = textView(sizeSp = 15f, bold = true).apply { setPadding(0, dp(8), 0, 0) }
+        val shareLabel = textView(sizeSp = 15f, bold = true, color = colText()).apply { setPadding(0, dp(8), 0, 0) }
         val shareBar = SeekBar(this).apply {
             max = 10 // 0..50% in 5% steps
+            progressTintList = android.content.res.ColorStateList.valueOf(colAccent())
+            thumbTintList = android.content.res.ColorStateList.valueOf(colAccent())
             progress = repo.explorationShare() / 5
             layoutParams = matchWrap()
         }
@@ -79,7 +81,7 @@ class SettingsActivity : AppCompatActivity() {
             layoutParams = matchWrap()
         }
         column.addView(urlInput)
-        val saveBtn = Button(this).apply { isAllCaps = false;
+        val saveBtn = Button(this).apply { stylePrimary(this@SettingsActivity);
             text = "接続先を保存"
             layoutParams = matchWrap()
             setOnClickListener {
@@ -99,7 +101,10 @@ class SettingsActivity : AppCompatActivity() {
         body("Discover ${info.versionName} (${info.longVersionCode})")
         body("未送信イベント: ${repo.queue.pendingCount()}件")
 
-        val scroll = ScrollView(this).apply { addView(column) }
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(colBg())
+            addView(column)
+        }
         applySystemBarInsets(scroll)
         setContentView(scroll)
     }

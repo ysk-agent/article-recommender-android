@@ -37,11 +37,11 @@ class SourceActivity : AppCompatActivity() {
         super.onCreate(saved)
         sourceId = intent.getStringExtra("sourceId")!!
 
-        nameView = textView(sizeSp = 20f, bold = true)
-        domainView = textView(sizeSp = 13f).apply { setPadding(0, dp(2), 0, 0) }
-        stateView = textView(sizeSp = 13f).apply { setPadding(0, dp(6), 0, 0) }
-        followBtn = Button(this).apply { isAllCaps = false }
-        blockBtn = Button(this).apply { isAllCaps = false }
+        nameView = textView(sizeSp = 20f, bold = true, color = colText())
+        domainView = textView(sizeSp = 13f, color = colTextSub()).apply { setPadding(0, dp(2), 0, 0) }
+        stateView = textView(sizeSp = 13f, color = colTextSub()).apply { setPadding(0, dp(6), 0, 0) }
+        followBtn = Button(this).apply { stylePrimary(this@SourceActivity) }
+        blockBtn = Button(this).apply { styleOutline(this@SourceActivity) }
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(10), 0, 0)
@@ -49,8 +49,8 @@ class SourceActivity : AppCompatActivity() {
             addView(blockBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 .apply { marginStart = dp(8) })
         }
-        statsView = textView(sizeSp = 13f).apply { setPadding(0, dp(12), 0, 0) }
-        topicsView = textView(sizeSp = 13f).apply { setPadding(0, dp(4), 0, 0) }
+        statsView = textView(sizeSp = 13f, color = colText()).apply { setPadding(0, dp(12), 0, 0) }
+        topicsView = textView(sizeSp = 13f, color = colTextSub()).apply { setPadding(0, dp(4), 0, 0) }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
@@ -65,7 +65,10 @@ class SourceActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             addView(header); addView(recycler)
         }
-        rootFrame = FrameLayout(this).apply { addView(column) }
+        rootFrame = FrameLayout(this).apply {
+            setBackgroundColor(colBg())
+            addView(column)
+        }
         applySystemBarInsets(rootFrame)
         setContentView(rootFrame)
 

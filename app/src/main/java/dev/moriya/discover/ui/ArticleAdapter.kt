@@ -2,6 +2,8 @@ package dev.moriya.discover.ui
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Outline
+import android.view.ViewOutlineProvider
 import android.util.LruCache
 import android.view.View
 import android.view.ViewGroup
@@ -53,12 +55,18 @@ class ArticleAdapter(
         val thumb = ImageView(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(ctx.dp(96), ctx.dp(68))
             scaleType = ImageView.ScaleType.CENTER_CROP
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height, ctx.dp(10).toFloat())
+                }
+            }
+            clipToOutline = true
         }
-        val title = ctx.textView(sizeSp = 15f, bold = true, maxLines = 2)
-        val meta = ctx.textView(sizeSp = 12f, maxLines = 1).apply {
+        val title = ctx.textView(sizeSp = 15f, bold = true, maxLines = 2, color = ctx.colText())
+        val meta = ctx.textView(sizeSp = 12f, maxLines = 1, color = ctx.colTextSub()).apply {
             setPadding(0, ctx.dp(4), 0, 0)
         }
-        val sourceLink = ctx.textView(sizeSp = 12f, color = 0xFF1565C0.toInt()).apply {
+        val sourceLink = ctx.textView(sizeSp = 12f, color = ctx.colAccent()).apply {
             setPadding(0, ctx.dp(2), 0, 0)
         }
         val texts = LinearLayout(ctx).apply {
@@ -70,8 +78,10 @@ class ArticleAdapter(
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = RecyclerView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setPadding(ctx.dp(12), ctx.dp(10), ctx.dp(12), ctx.dp(10))
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(ctx.dp(12), ctx.dp(5), ctx.dp(12), ctx.dp(5)) }
+            background = ctx.roundedBg(ctx.colSurface(), 16, ctx.colBorder())
+            setPadding(ctx.dp(12), ctx.dp(12), ctx.dp(12), ctx.dp(12))
             addView(thumb); addView(texts)
         }
         return VH(root, thumb, title, meta, sourceLink)
@@ -101,8 +111,8 @@ class ArticleAdapter(
     }
 
     private fun thumbColor(sourceId: String): Int {
-        val palette = intArrayOf(0xFFD7CCC8.toInt(), 0xFFC5CAE9.toInt(), 0xFFC8E6C9.toInt(),
-            0xFFFFE0B2.toInt(), 0xFFB2DFDB.toInt(), 0xFFF8BBD0.toInt())
+        val palette = intArrayOf(0xFFD8D3CC.toInt(), 0xFFC9CFD6.toInt(), 0xFFCBD8CC.toInt(),
+            0xFFE3D9C6.toInt(), 0xFFCBDCD8.toInt(), 0xFFDECBD2.toInt())
         return palette[(sourceId.hashCode() and Int.MAX_VALUE) % palette.size]
     }
 }

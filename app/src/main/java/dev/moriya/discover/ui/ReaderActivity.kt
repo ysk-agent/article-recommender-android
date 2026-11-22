@@ -40,6 +40,7 @@ class ReaderActivity : AppCompatActivity() {
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
+            progressTintList = android.content.res.ColorStateList.valueOf(colAccent())
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(3))
         }
@@ -56,7 +57,7 @@ class ReaderActivity : AppCompatActivity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(colBg())
             addView(progress); addView(webView)
         }
         applySystemBarInsets(root)

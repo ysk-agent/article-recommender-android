@@ -1,0 +1,144 @@
+package dev.moriya.discover.data
+
+import java.util.UUID
+
+/**
+* In-memory fake of the Python backend, for developing the app before
+* (and independently of) the real service. Holds mutable state so
+* swipes, follow/block and history corrections behave end-to-end
+* exactly as they will against the real API: every user action is an
+* appended event, and history corrections supersede earlier events
+* instead of editing them (event sourcing, design §7).
+*/
+class FakeBackend: BackendApi {
+
+private val sources = mutableListOf(
+Source("s-fg", "Fed Guy", "fedguy.com", topics = listOf("Fed", "repo", "流動性"),
+statsShown = 142, statsOpened = 38, statsHighRated = 9, statsRegretRate = 0.05),
+Source("s-netinterest", "Net Interest", "netinterest.co", topics = listOf("銀行", "フィンテック"),
+statsShown = 96, statsOpened = 31, statsHighRated = 7, statsRegretRate = 0.03),
+Source("s-hn", "Hacker News", "news.ycombinator.com", topics = listOf("AI", "開発", "スタートアップ"),
+statsShown = 420, statsOpened = 88, statsHighRated = 11, statsRegretRate = 0.18),
+Source("s-arxiv", "arXiv cs.LG", "arxiv.org", topics = listOf("機械学習", "論文"),
+statsShown = 210, statsOpened = 26, statsHighRated = 6, statsRegretRate = 0.08),
+Source("s-nikkei", "日本経済新聞", "nikkei.com", topics = listOf("市況", "日銀", "企業"),
+statsShown = 380, statsOpened = 64, statsHighRated = 5, statsRegretRate = 0.22),
+Source("s-tabelog-mag", "食べログマガジン", "tabelog.com", topics = listOf("グルメ", "エリア"),
+statsShown = 74, statsOpened = 19, statsHighRated = 4, statsRegretRate = 0.06),
+Source("s-osm-blog", "OpenStreetMap Blog", "blog.openstreetmap.org", topics = listOf("地図", "OSM"),
+statsShown = 41, statsOpened = 12, statsHighRated = 3, statsRegretRate = 0.0),
+Source("s-calc-risk", "Calculated Risk", "calculatedriskblog.com", topics = listOf("住宅", "マクロ"),
+statsShown = 118, statsOpened = 29, statsHighRated = 6, statsRegretRate = 0.04),
+Source("s-clickbait", "バズ速ニュース", "buzzsoku.example", topics = listOf("芸能", "炎上"),
+statsShown = 260, statsOpened = 41, statsHighRated = 0, statsRegretRate = 0.61),
+)
+
+private val now = System.currentTimeMillis()
+private fun hoursAgo(h: Double) = now - (h * 3600_000).toLong()
+
+private val articles = mutableListOf(
+Article("a01", "s-fg", "Fed Guy", "The Fed's Balance Sheet Is Shrinking in a New Way", "https://fedguy.com/example1", null, hoursAgo(1.2), "流動性", SlotType.EXPLOIT, "c-fed-1"),
+Article("a02", "s-hn", "Hacker News", "Show HN: A local-first recommender that never phones home", "https://news.ycombinator.com/item?id=1", null, hoursAgo(2.0), "開発", SlotType.EXPLORE_NEAR),
+Article("a03", "s-nikkei", "日本経済新聞", "日銀、来週の会合でフォワードガイダンス修正案を検討", "https://www.nikkei.com/example3", null, hoursAgo(2.5), "日銀", SlotType.EXPLOIT),
+Article("a04", "s-arxiv", "arXiv cs.LG", "Prototype-Based Interest Modelling for Single-User Recommendation", "https://arxiv.org/abs/example4", null, hoursAgo(3.1), "機械学習", SlotType.EXPLOIT),
+Article("a05", "s-netinterest", "Net Interest", "How a Regional Bank Quietly Rewired Its Deposit Franchise", "https://www.netinterest.co/example5", null, hoursAgo(4.0), "銀行", SlotType.EXPLOIT),
+Article("a06", "s-clickbait", "バズ速ニュース", "有名俳優が深夜に語った一言にスタジオ騒然！？", "https://buzzsoku.example/6", null, hoursAgo(4.4), "芸能", SlotType.EXPLOIT),
+Article("a07", "s-tabelog-mag", "食べログマガジン", "神保町のカレー名店マップ、老舗5軒を歩く", "https://tabelog.com/example7", null, hoursAgo(5.0), "グルメ", SlotType.EXPLORE_NEAR),
+Article("a08", "s-calc-risk", "Calculated Risk", "Housing Starts Rose in October, Permits Fell", "https://www.calculatedriskblog.com/example8", null, hoursAgo(6.3), "住宅", SlotType.EXPLOIT),
+Article("a09", "s-osm-blog", "OpenStreetMap Blog", "WeeklyOSM: Tile Rendering Notes from the Community", "https://blog.openstreetmap.org/example9", null, hoursAgo(7.0), "地図", SlotType.EXPLORE_NEAR),
+Article("a10", "s-fg", "Fed Guy", "Repo Fails Are Telling a Different Story This Month", "https://fedguy.com/example10", null, hoursAgo(8.2), "repo", SlotType.EXPLOIT, "c-fed-1"),
+Article("a11", "s-hn", "Hacker News", "SQLite Is All You Need (for a Personal Feed)", "https://news.ycombinator.com/item?id=11", null, hoursAgo(9.0), "開発", SlotType.EXPLOIT),
+Article("a12", "s-nikkei", "日本経済新聞", "円相場、一時158円台　介入警戒感が再び強まる", "https://www.nikkei.com/example12", null, hoursAgo(10.5), "市況", SlotType.EXPLOIT),
+Article("a13", "s-arxiv", "arXiv cs.LG", "Exploration Quotas in Bandit Systems with Sparse Explicit Feedback", "https://arxiv.org/abs/example13", null, hoursAgo(12.0), "論文", SlotType.EXPLORE_FAR),
+Article("a14", "s-netinterest", "Net Interest", "The Plumbing Behind Instant Payments, Explained Slowly", "https://www.netinterest.co/example14", null, hoursAgo(14.0), "フィンテック", SlotType.EXPLOIT),
+Article("a15", "s-tabelog-mag", "食べログマガジン", "地図から探すランチ：半径500mの幸せ", "https://tabelog.com/example15", null, hoursAgo(16.0), "グルメ", SlotType.EXPLOIT),
+Article("a16", "s-calc-risk", "Calculated Risk", "Mortgage Rates and the Lock-In Effect, Updated Charts", "https://www.calculatedriskblog.com/example16", null, hoursAgo(19.0), "マクロ", SlotType.EXPLORE_NEAR),
+Article("a17", "s-hn", "Hacker News", "Ask HN: How do you triage 300 articles a day?", "https://news.ycombinator.com/item?id=17", null, hoursAgo(22.0), "スタートアップ", SlotType.EXPLORE_FAR),
+Article("a18", "s-clickbait", "バズ速ニュース", "あの人気番組が終了！？理由がヤバすぎた…", "https://buzzsoku.example/18", null, hoursAgo(25.0), "炎上", SlotType.EXPLOIT),
+)
+
+private val inboxIds = linkedSetOf<String>()
+private val removedFromFeed = mutableSetOf<String>()
+private val eventLog = mutableListOf<AppEvent>()
+private val titlesById = articles.associate { it.id to it.title}
+private val sourceNameById = sources.associate { it.id to it.name}
+
+override fun feed(): List<Article> {
+val blocked = sources.filter { it.state == SourceState.BLOCKED}.map { it.id}.toSet()
+return articles.filter { it.id!in removedFromFeed && it.sourceId!in blocked}
+.sortedByDescending { it.publishedAtEpochMs}
+}
+
+override fun inbox(): List<Article> =
+articles.filter { it.id in inboxIds}.sortedByDescending { it.publishedAtEpochMs}
+
+override fun sources(): List<Source> = sources.toList()
+
+override fun sourceArticles(sourceId: String): List<Article> =
+articles.filter { it.sourceId == sourceId}.sortedByDescending { it.publishedAtEpochMs}
+
+override fun history(): List<HistoryEntry> {
+val superseded = eventLog.mapNotNull { it.supersedesEventId}.toSet()
+return eventLog
+.filter { it.type!= EventType.IMPRESSION && it.type!= EventType.SEEN}
+.sortedByDescending { it.timestampEpochMs}
+.map { e ->
+HistoryEntry(
+eventId = e.id,
+type = e.type,
+articleId = e.articleId,
+articleTitle = e.articleId?.let { titlesById[it]},
+sourceId = e.sourceId,
+sourceName = e.sourceId?.let { sourceNameById[it]},
+timestampEpochMs = e.timestampEpochMs,
+supersededBy = if (e.id in superseded) "superseded" else null,
+)
+}
+}
+
+override fun postEvents(events: List<AppEvent>) {
+for (e in events) {
+eventLog.add(e)
+when (e.type) {
+EventType.DISLIKE, EventType.KNOWN -> e.articleId?.let { removedFromFeed.add(it)}
+EventType.INBOX, EventType.INBOX_HIGH -> e.articleId?.let { inboxIds.add(it)}
+EventType.UNDO -> applyUndo(e)
+EventType.CORRECTION -> applyCorrection(e)
+else -> {}
+}
+}
+}
+
+private fun applyUndo(undo: AppEvent) {
+val target = eventLog.firstOrNull { it.id == undo.supersedesEventId}?: return
+when (target.type) {
+EventType.DISLIKE, EventType.KNOWN -> target.articleId?.let { removedFromFeed.remove(it)}
+EventType.INBOX, EventType.INBOX_HIGH -> target.articleId?.let { inboxIds.remove(it)}
+else -> {}
+}
+}
+
+private fun applyCorrection(correction: AppEvent) {
+// The correction event's own type field carries the semantic in
+// History UI (see Repository.correct): for the fake backend we
+// encode the new action in the note via a paired event appended
+// by the repository, so here we only revert the old effect.
+val target = eventLog.firstOrNull { it.id == correction.supersedesEventId}?: return
+when (target.type) {
+EventType.DISLIKE, EventType.KNOWN -> target.articleId?.let { removedFromFeed.remove(it)}
+EventType.INBOX, EventType.INBOX_HIGH -> target.articleId?.let { inboxIds.remove(it)}
+else -> {}
+}
+}
+
+override fun setSourceState(sourceId: String, state: SourceState) {
+val idx = sources.indexOfFirst { it.id == sourceId}
+if (idx >= 0) sources[idx] = sources[idx].copy(state = state)
+val type = when (state) {
+SourceState.FOLLOWING -> EventType.FOLLOW
+SourceState.BLOCKED -> EventType.BLOCK
+SourceState.NEUTRAL -> EventType.UNBLOCK
+}
+eventLog.add(AppEvent(UUID.randomUUID().toString(), type, System.currentTimeMillis(), sourceId = sourceId))
+}
+}

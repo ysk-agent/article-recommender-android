@@ -1,0 +1,10 @@
+*.iml
+.gradle/
+build/
+local.properties
+.idea/
+*.keystore
+discover.apk
+logcat.txt
+window_dump.xml
+screenshot-*.png

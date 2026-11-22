@@ -15,8 +15,9 @@ object DebugTuning {
     private const val KEY_ZONE_PCT = "stage2_zone_pct"
     private const val KEY_HOLD_MS = "hold_ms"
 
-    // 30% / 400 ms felt right on the device (Yosuke, 2026-11-22).
-    const val DEFAULT_ZONE_PCT = 30
+    // 35% / 400 ms: with the colour-blend display a wider zone
+    // feels natural too (Yosuke, 2026-11-22).
+    const val DEFAULT_ZONE_PCT = 35
     const val DEFAULT_HOLD_MS = 400
     const val ZONE_MIN = 30
     const val ZONE_MAX = 85

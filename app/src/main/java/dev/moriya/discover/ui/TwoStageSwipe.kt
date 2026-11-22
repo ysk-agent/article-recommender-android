@@ -20,7 +20,7 @@ import kotlin.math.abs
  * pull-to-refresh model: distance alone never selects stage 2.
  *
  * - Past 18% of the row width, releasing applies stage 1.
- * - Past the stage-2 zone threshold (30% by default) the row is in
+ * - Past the stage-2 zone threshold (35% by default) the row is in
  *   the stage-2 zone. While the hold is still progressing, the
  *   display stays the stage-1 action's, but its colour blends
  *   gradually toward the stage-2 colour (Yosuke, 2026-11-22) — the
@@ -57,7 +57,7 @@ class TwoStageSwipe(
         const val STAGE1 = 0.18f
         // Design defaults only — the live values come from
         // DebugTuning (the temporary on-screen sliders).
-        const val STAGE2_ZONE = 0.30f
+        const val STAGE2_ZONE = 0.35f
         const val HOLD_MS = 400L
 
         /** Linear RGB blend, t in [0,1]: the hold-progress colour. */

@@ -5,6 +5,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
@@ -12,17 +15,27 @@ import dev.moriya.discover.data.SwipeAction
 import kotlin.math.abs
 
 /**
- * Two-stage swipe, both directions (design §3).
+ * Two-stage swipe, both directions (design §3), with the stage-2
+ * trigger redesigned at Yosuke's direction (2026-11-22) on the
+ * pull-to-refresh model: distance alone never selects stage 2.
  *
- * Stage boundaries are fractions of the row width: stage 1 from 18%,
- * stage 2 from 70%. The stage is captured at the moment the finger is
- * released — the dismiss animation afterwards must not count, or its
- * run-off to 100% would promote nearly every swipe to stage 2 (the
- * v0.1.0 defect Yosuke reported: stage 1 was almost unreachable).
- * Fling dismissal is disabled for the same reason: distance alone
- * decides. The background colour and label switch at the stage-2
- * boundary, and a haptic tick fires on every crossing, because
- * overshooting on the left flips the meaning (dislike -> known).
+ * - Past 18% of the row width, releasing applies stage 1.
+ * - Past 55% the row is in the stage-2 zone: the stage-2 label shows
+ *   dimmed. Holding there for ~0.45 s arms stage 2 — the label goes
+ *   full-strength with a stronger haptic — and releasing then
+ *   applies stage 2. Leaving the zone, or releasing before the hold
+ *   completes, falls back to stage 1.
+ *
+ * History: v0.1.0 read the stage after the dismiss animation had run
+ * the row off to 100%, so almost every swipe became stage 2.
+ * v0.1.1 captured the stage at release and moved the boundary to
+ * 70%, but a natural decisive flick still travels that far, so
+ * stage 1 stayed hard to hit on the real device. The hold is the
+ * deliberate-intent signal that distance cannot express.
+ *
+ * While the finger sits still in the zone, no new draw is triggered
+ * by touch events, so a small invalidate ticker runs for exactly
+ * that period to let the arming moment render.
  */
 class TwoStageSwipe(
     private val onAction: (holder: RecyclerView.ViewHolder, action: SwipeAction) -> Unit,
@@ -30,17 +43,18 @@ class TwoStageSwipe(
 
     private var lastStage = 0
     private var releaseFraction = 0f
-    private var releaseDirection = 0
+    private var releaseArmed = false
+    private var zoneEnteredAt = 0L
+    private var armed = false
+    private val handler = Handler(Looper.getMainLooper())
+    private var ticker: Runnable? = null
 
     companion object {
         const val STAGE1 = 0.18f
-        const val STAGE2 = 0.70f
+        const val STAGE2_ZONE = 0.55f
+        const val HOLD_MS = 450L
 
-        fun stageOf(fraction: Float): Int = when {
-            fraction >= STAGE2 -> 2
-            fraction >= STAGE1 -> 1
-            else -> 0
-        }
+        fun stageOf(fraction: Float): Int = if (fraction >= STAGE1) 1 else 0
 
         fun actionFor(direction: Int, stage: Int): SwipeAction? = when {
             stage <= 0 -> null
@@ -75,58 +89,118 @@ class TwoStageSwipe(
     override fun getSwipeEscapeVelocity(defaultValue: Float): Float = Float.MAX_VALUE
     override fun getSwipeVelocityThreshold(defaultValue: Float): Float = Float.MAX_VALUE
 
+    private fun startTicker(rv: RecyclerView) {
+        if (ticker != null) return
+        val t = object : Runnable {
+            override fun run() {
+                if (zoneEnteredAt == 0L) { ticker = null; return }
+                rv.invalidate()
+                handler.postDelayed(this, 50)
+            }
+        }
+        ticker = t
+        handler.postDelayed(t, 50)
+    }
+
+    private fun stopTicker() {
+        ticker?.let { handler.removeCallbacks(it) }
+        ticker = null
+    }
+
+    private fun haptic(item: android.view.View, strong: Boolean) {
+        item.performHapticFeedback(
+            if (strong && Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM
+            else HapticFeedbackConstants.LONG_PRESS)
+    }
+
     override fun onChildDraw(c: Canvas, rv: RecyclerView, vh: RecyclerView.ViewHolder,
                              dX: Float, dY: Float, actionState: Int, isActive: Boolean) {
         val item = vh.itemView
         val fraction = if (item.width > 0) abs(dX) / item.width else 0f
         val direction = if (dX < 0) -1 else if (dX > 0) 1 else 0
-        val stage = stageOf(fraction)
 
         if (isActive) {
-            // Only the live drag counts. After release, ItemTouchHelper
-            // animates the row off-screen through this same callback;
-            // that run-off must not rewrite the captured stage.
+            // Only the live drag counts; the post-release dismiss
+            // animation runs through this same callback and must not
+            // rewrite the captured state.
             releaseFraction = fraction
-            releaseDirection = direction
-            if (stage != lastStage && direction != 0) {
-                // Boundary crossed: label/colour switch here, with a tick.
-                item.performHapticFeedback(
-                    if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM
-                    else HapticFeedbackConstants.LONG_PRESS)
-                lastStage = stage
+            val inZone = fraction >= STAGE2_ZONE && direction != 0
+            if (inZone) {
+                if (zoneEnteredAt == 0L) {
+                    zoneEnteredAt = SystemClock.uptimeMillis()
+                    startTicker(rv)
+                }
+                if (!armed && SystemClock.uptimeMillis() - zoneEnteredAt >= HOLD_MS) {
+                    armed = true
+                    haptic(item, strong = true)
+                }
+            } else {
+                zoneEnteredAt = 0L
+                armed = false
+                stopTicker()
             }
-        }
+            releaseArmed = armed
 
-        val action = actionFor(direction, stage)
-        if (action != null && direction != 0) {
-            val radius = rv.context.dp(16).toFloat()
-            val paint = Paint().apply { color = color(action); isAntiAlias = true }
-            val rect = if (direction < 0)
-                RectF(item.right + dX, item.top.toFloat(), item.right.toFloat(), item.bottom.toFloat())
-            else
-                RectF(item.left.toFloat(), item.top.toFloat(), item.left + dX, item.bottom.toFloat())
-            c.drawRoundRect(rect, radius, radius, paint)
-            val text = Paint().apply {
-                color = Color.WHITE; textSize = rv.context.dp(14).toFloat(); isAntiAlias = true
-                isFakeBoldText = true
+            // Display stage: 0 none, 1 = stage 1, 2 = stage 2 shown
+            // dimmed (in zone, not yet armed), 3 = stage 2 armed.
+            val display = when {
+                fraction < STAGE1 || direction == 0 -> 0
+                armed -> 3
+                inZone -> 2
+                else -> 1
             }
-            val label = label(action)
-            val ty = item.top + item.height / 2f + rv.context.dp(5)
-            if (direction < 0) c.drawText(label, item.right - text.measureText(label) - rv.context.dp(16), ty, text)
-            else c.drawText(label, item.left + rv.context.dp(16).toFloat(), ty, text)
+            if (display != lastStage && direction != 0 && fraction >= STAGE1) {
+                haptic(item, strong = false)
+                lastStage = display
+            }
+            if (direction != 0) drawReveal(c, rv, item, dX, direction,
+                actionFor(direction, if (display >= 2) 2 else 1), dimmed = display == 2)
+        } else if (direction != 0 && releaseFraction >= STAGE1) {
+            // Dismiss animation: keep showing the action that will be
+            // applied, at full strength.
+            drawReveal(c, rv, item, dX, direction,
+                actionFor(direction, if (releaseArmed) 2 else 1), dimmed = false)
         }
         super.onChildDraw(c, rv, vh, dX, dY, actionState, isActive)
     }
 
+    private fun drawReveal(c: Canvas, rv: RecyclerView, item: android.view.View,
+                           dX: Float, direction: Int, action: SwipeAction?, dimmed: Boolean) {
+        if (action == null) return
+        val alpha = if (dimmed) 120 else 255
+        val radius = rv.context.dp(16).toFloat()
+        val paint = Paint().apply { color = color(action); this.alpha = alpha; isAntiAlias = true }
+        val rect = if (direction < 0)
+            RectF(item.right + dX, item.top.toFloat(), item.right.toFloat(), item.bottom.toFloat())
+        else
+            RectF(item.left.toFloat(), item.top.toFloat(), item.left + dX, item.bottom.toFloat())
+        c.drawRoundRect(rect, radius, radius, paint)
+        val text = Paint().apply {
+            color = Color.WHITE; this.alpha = alpha
+            textSize = rv.context.dp(14).toFloat(); isAntiAlias = true; isFakeBoldText = true
+        }
+        val label = label(action)
+        val ty = item.top + item.height / 2f + rv.context.dp(5)
+        if (direction < 0) c.drawText(label, item.right - text.measureText(label) - rv.context.dp(16), ty, text)
+        else c.drawText(label, item.left + rv.context.dp(16).toFloat(), ty, text)
+    }
+
     override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {
         val dir = if (direction == ItemTouchHelper.LEFT) -1 else 1
-        val action = actionFor(dir, stageOf(releaseFraction).coerceAtLeast(1))
-        lastStage = 0; releaseFraction = 0f; releaseDirection = 0
+        val stage = if (releaseArmed) 2 else 1
+        val action = actionFor(dir, stage)
+        resetGesture()
         if (action != null) onAction(vh, action)
     }
 
     override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
         super.clearView(rv, vh)
-        lastStage = 0; releaseFraction = 0f; releaseDirection = 0
+        resetGesture()
+    }
+
+    private fun resetGesture() {
+        lastStage = 0; releaseFraction = 0f; releaseArmed = false
+        zoneEnteredAt = 0L; armed = false
+        stopTicker()
     }
 }

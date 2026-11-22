@@ -132,8 +132,19 @@ section_interact() {
     wait_until 10 "stage-1 banner" ui_has "低評価" || note_fail "stage-1 swipe did not apply dislike"
     tap_text "取り消し" || note_fail "stage-1 undo tap failed"
     sleep 1
+    # Fast long drag (~80% in 300ms): crosses the stage-2 zone but
+    # never holds there, so it must still apply stage 1. This is the
+    # regression test for the on-device report that stage 1 was
+    # unreachable — under the hold-to-arm model (v0.1.2) distance
+    # alone cannot select stage 2.
     adb shell input swipe 918 "$cy" 100 "$cy" 300
-    wait_until 10 "stage-2 banner" ui_has "もう知っている" || note_fail "stage-2 swipe did not apply known"
+    wait_until 10 "fast-long banner" ui_has "低評価" || note_fail "fast long drag without hold did not stay stage 1"
+    tap_text "取り消し" || note_fail "fast-long undo tap failed"
+    sleep 1
+    # Slow long drag (~80% over 2000ms): the finger spends ~600ms
+    # inside the stage-2 zone before release, arming stage 2.
+    adb shell input swipe 918 "$cy" 100 "$cy" 2000
+    wait_until 10 "stage-2 banner" ui_has "もう知っている" || note_fail "stage-2 swipe with hold did not apply known"
     tap_text "取り消し" || note_fail "stage-2 undo tap failed"
     sleep 1
     adb shell input swipe 162 "$cy" 594 "$cy" 300

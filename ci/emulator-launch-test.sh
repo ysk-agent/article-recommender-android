@@ -2,7 +2,10 @@
 # Emulator launch test (API 35) for Discover.
 #
 # Test-time techniques carried over from yt-client-android (2026-11-21):
-#  - Condition-based waits (wait_until polls every 2 s with a hard cap)
+#  - Condition-based waits (wait_until polls every 1 s with a hard cap).
+#    Caps are sized from observed CI runs: every successful wait in
+#    runs 1-3 completed on the first poll, so caps only bound the
+#    failure path — keep them tight (10-15 s, 30 s for cold start).
 #    instead of blind fixed sleeps — YT Client's fixed sleeps summed to
 #    ~160 s per run before this change.
 #  - TEST_SECTIONS selects which sections run (all | feed | interact),
@@ -30,7 +33,7 @@ wait_until() {
   local waited=0
   while [ $waited -lt $timeout ]; do
     if "$@" >/dev/null 2>&1; then echo "wait ok: $desc (${waited}s)"; return 0; fi
-    sleep 2; waited=$((waited + 2))
+    sleep 1; waited=$((waited + 1))
   done
   echo "wait timeout: $desc (${timeout}s)"; return 1
 }
@@ -70,11 +73,11 @@ ensure_main() {
   if ! top_is MainActivity; then
     echo "ensure_main: relaunching MainActivity"
     adb shell am start -W -n "$PKG/.MainActivity" >/dev/null 2>&1 || true
-    if ! wait_until 15 "MainActivity on top" top_is MainActivity; then
+    if ! wait_until 10 "MainActivity on top" top_is MainActivity; then
       echo "ensure_main: force-stop + relaunch"
       adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
       adb shell am start -W -n "$PKG/.MainActivity" >/dev/null 2>&1 || true
-      wait_until 30 "MainActivity on top after relaunch" top_is MainActivity || true
+      wait_until 20 "MainActivity on top after relaunch" top_is MainActivity || true
     fi
   fi
 }
@@ -83,12 +86,12 @@ ensure_main() {
 
 section_feed() {
   adb shell am start -W -n "$PKG/.MainActivity" >/dev/null 2>&1 || true
-  wait_until 60 "MainActivity on top" top_is MainActivity || true
+  wait_until 30 "MainActivity on top" top_is MainActivity || true
   check_top MainActivity "launch"
   pid_alive || note_fail "process dead after launch"
   # Feed rows come from FakeBackend: poll the UI dump for a known title
   # instead of sleeping a fixed number of seconds.
-  wait_until 30 "feed rows rendered" ui_has "Balance Sheet" || note_fail "no feed rows rendered"
+  wait_until 15 "feed rows rendered" ui_has "Balance Sheet" || note_fail "no feed rows rendered"
   screencap screenshot-main.png
   for tab in フィード Inbox 媒体 履歴 設定; do
     ui_has "$tab" || note_fail "tab/button missing: $tab"
@@ -99,12 +102,12 @@ section_interact() {
   ensure_main
   # Open the first article: the WebView reader must come to the top.
   tap_text "The Fed's Balance Sheet Is Shrinking in a New Way" || note_fail "could not tap first article"
-  wait_until 45 "ReaderActivity on top" top_is ReaderActivity || true
+  wait_until 15 "ReaderActivity on top" top_is ReaderActivity || true
   check_top ReaderActivity "article tap"
   screencap screenshot-reader.png
   if top_is ReaderActivity; then
     adb shell input keyevent KEYCODE_BACK
-    wait_until 30 "back to MainActivity" top_is MainActivity || true
+    wait_until 10 "back to MainActivity" top_is MainActivity || true
   fi
   ensure_main
 
@@ -118,7 +121,7 @@ section_interact() {
     nums=$(echo "$bounds" | grep -o '[0-9]\+'); set -- $nums
     local cy=$(( ($2 + $4) / 2 ))
     adb shell input swipe 1000 "$cy" 500 "$cy" 300
-    wait_until 20 "undo banner after swipe" ui_has "低評価" || note_fail "swipe banner not shown"
+    wait_until 10 "undo banner after swipe" ui_has "低評価" || note_fail "swipe banner not shown"
     tap_text "取り消し" || true
   else
     echo "interact: swipe target row not visible; skipping swipe leg"
@@ -126,26 +129,26 @@ section_interact() {
 
   # Tab round trip: Inbox -> Sources -> History -> Feed.
   tap_text "Inbox" || note_fail "tap Inbox failed"
-  wait_until 20 "inbox renders" ui_has "Inboxは空です" || echo "note: inbox not empty or text differs"
+  wait_until 10 "inbox renders" ui_has "Inboxは空です" || echo "note: inbox not empty or text differs"
   tap_text "媒体" || note_fail "tap Sources failed"
-  wait_until 20 "sources render" ui_has "Fed Guy" || note_fail "sources list not rendered"
+  wait_until 10 "sources render" ui_has "Fed Guy" || note_fail "sources list not rendered"
   screencap screenshot-sources.png
   tap_text "履歴" || note_fail "tap History failed"
-  wait_until 20 "history renders" ui_has "開いた" || echo "note: history has no open entry yet"
+  wait_until 10 "history renders" ui_has "開いた" || echo "note: history has no open entry yet"
   screencap screenshot-history.png
   tap_text "フィード" || note_fail "tap Feed failed"
-  wait_until 20 "feed re-renders" ui_has "Balance Sheet" || note_fail "feed did not re-render"
+  wait_until 10 "feed re-renders" ui_has "Balance Sheet" || note_fail "feed did not re-render"
 }
 
 section_settings() {
   ensure_main
   tap_text "設定" || note_fail "tap Settings failed"
-  wait_until 30 "SettingsActivity on top" top_is SettingsActivity || true
+  wait_until 15 "SettingsActivity on top" top_is SettingsActivity || true
   check_top SettingsActivity "settings button"
-  wait_until 20 "exploration setting renders" ui_has "探索割合" || note_fail "exploration share setting missing"
+  wait_until 10 "exploration setting renders" ui_has "探索割合" || note_fail "exploration share setting missing"
   screencap screenshot-settings.png
   if top_is SettingsActivity; then adb shell input keyevent KEYCODE_BACK; fi
-  wait_until 30 "back to MainActivity" top_is MainActivity || true
+  wait_until 10 "back to MainActivity" top_is MainActivity || true
 }
 
 # --- main ------------------------------------------------------------------
@@ -161,7 +164,7 @@ esac
 echo "TEST_SECTIONS=$TEST_SECTIONS (feed=$RUN_FEED interact=$RUN_INTERACT)"
 
 adb root >/dev/null 2>&1 || true
-wait_until 15 "adb responsive" adb shell echo ok || true
+wait_until 10 "adb responsive" adb shell echo ok || true
 adb install -r "$APK" || note_fail "adb install failed"
 adb logcat -c || true
 

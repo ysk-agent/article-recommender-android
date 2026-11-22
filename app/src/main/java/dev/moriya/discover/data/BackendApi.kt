@@ -27,4 +27,15 @@ interface BackendApi {
     fun history(): List<HistoryEntry>
     fun postEvents(events: List<AppEvent>)
     fun setSourceState(sourceId: String, state: SourceState)
+    /** History correction (design §7): supersede the entry's event with
+     *  the replacement action. The real backend exposes this as
+     *  POST /history/{id}/correct; the fake applies it to its log. */
+    fun correct(entry: HistoryEntry, newAction: SwipeAction)
+    /** Undo a just-applied event. The real backend has no undo path
+     *  yet (see HttpBackend gap 3) and throws; callers must tolerate it. */
+    fun undo(event: AppEvent)
+    /** Exploration share, percent 0–50 (design §5b). A user setting,
+     *  owned by the backend's feed composition; the app reads/writes it. */
+    fun explorationShare(): Int
+    fun setExplorationShare(percent: Int)
 }

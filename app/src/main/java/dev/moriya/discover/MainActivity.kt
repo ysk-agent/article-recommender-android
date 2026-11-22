@@ -43,6 +43,13 @@ class MainActivity : AppCompatActivity() {
             }
             tabButtons.add(btn); bar.addView(btn)
         }
+        // Settings is a separate screen, not a fifth tab (design §2
+        // fixes four tabs); its button sits at the end of the tab bar.
+        bar.addView(Button(this).apply {
+            text = "設定"
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f)
+            setOnClickListener { startActivity(dev.moriya.discover.ui.SettingsActivity.intent(this@MainActivity)) }
+        })
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(container); addView(bar)

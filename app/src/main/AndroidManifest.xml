@@ -23,5 +23,13 @@
         <activity
             android:name=".ui.SourceActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".ui.ReaderActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false" />
     </application>
 </manifest>

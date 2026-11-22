@@ -1,33 +1,155 @@
 #!/usr/bin/env bash
-# Emulator launch test (API 35): install the built APK, launch the main
-# activity, and verify the feed actually renders rows from the fake
-# backend. A compiled APK is not a verified app — this is the gate.
+# Emulator launch test (API 35) for Discover.
+#
+# Test-time techniques carried over from yt-client-android (2026-11-21):
+#  - Condition-based waits (wait_until polls every 2 s with a hard cap)
+#    instead of blind fixed sleeps — YT Client's fixed sleeps summed to
+#    ~160 s per run before this change.
+#  - TEST_SECTIONS selects which sections run (all | feed | interact),
+#    chosen per commit via the [test: ...] marker in the commit message
+#    (see build.yml); [test: all] is reserved for minor releases.
+#  - ANR-dialog dismissal before screenshots, package-scoped FATAL
+#    check, AVD snapshot cache + Gradle cache (both in build.yml).
+# A compiled APK is not a verified app — this script is the gate.
 set -u
+cd "$(dirname "$0")/.."
+APK=discover.apk
 PKG=dev.moriya.discover
-adb install -r discover.apk || exit 1
-adb logcat -c
-adb shell am start -W -n "$PKG/.MainActivity" || exit 1
-sleep 5
-adb shell uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1
-adb pull /sdcard/window_dump.xml window_dump.xml >/dev/null 2>&1
-adb exec-out screencap -p > screenshot-main.png 2>/dev/null
-adb logcat -d > logcat.txt 2>/dev/null
+FAIL=0
+note_fail() { echo "LAUNCH-TEST FAILURE: $1"; FAIL=1; }
+top_activity() { adb shell dumpsys activity activities 2>/dev/null | grep "topResumedActivity" | head -1; }
+top_is() { top_activity | grep -q "$PKG/.$1"; }
+pid_alive() { [ -n "$(adb shell pidof $PKG 2>/dev/null | tr -d '\r\n')" ]; }
 
-fail=0
-if ! adb shell pidof "$PKG" >/dev/null; then
-  echo "FAIL: app process not running"; fail=1
+wait_until() {
+  local timeout=$1 desc=$2; shift 2
+  local waited=0
+  while [ $waited -lt $timeout ]; do
+    if "$@" >/dev/null 2>&1; then echo "wait ok: $desc (${waited}s)"; return 0; fi
+    sleep 2; waited=$((waited + 2))
+  done
+  echo "wait timeout: $desc (${timeout}s)"; return 1
+}
+
+dump_ui() { adb shell uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1; adb pull /sdcard/window_dump.xml window_dump.xml >/dev/null 2>&1; }
+ui_has() { dump_ui && grep -q "$1" window_dump.xml; }
+
+dismiss_anr() {
+  dump_ui || return 0
+  grep -q "isn't responding" window_dump.xml || return 0
+  tap_text "Wait" || true
+  sleep 2
+}
+screencap() { dismiss_anr; adb exec-out screencap -p > "$1" 2>/dev/null; echo "screenshot: $1 ($(stat -c%s "$1" 2>/dev/null) bytes)"; }
+
+# tap_text <text>: find the node whose text matches and tap its centre.
+tap_text() {
+  dump_ui || return 1
+  local node bounds nums
+  node=$(grep -o "text=\"$1\"[^>]*" window_dump.xml | head -1)
+  [ -n "$node" ] || { echo "tap_text: not found: $1"; return 1; }
+  bounds=$(echo "$node" | grep -o 'bounds="\[[0-9,]*\]\[[0-9,]*\]"' | head -1)
+  nums=$(echo "$bounds" | grep -o '[0-9]\+')
+  set -- $nums
+  [ $# -eq 4 ] || return 1
+  local cx=$(( ($1 + $3) / 2 )) cy=$(( ($2 + $4) / 2 ))
+  echo "tap_text: '$1' at $cx,$cy"
+  adb shell input tap "$cx" "$cy"
+}
+
+check_top() { # activity, description
+  local top; top=$(top_activity); echo "top: $top"
+  if echo "$top" | grep -q "$PKG/.$1"; then echo "OK: $1 is top"; else note_fail "$1 not top ($2)"; fi
+}
+
+# --- sections ------------------------------------------------------------
+
+section_feed() {
+  adb shell am start -W -n "$PKG/.MainActivity" >/dev/null 2>&1 || true
+  wait_until 60 "MainActivity on top" top_is MainActivity || true
+  check_top MainActivity "launch"
+  pid_alive || note_fail "process dead after launch"
+  # Feed rows come from FakeBackend: poll the UI dump for a known title
+  # instead of sleeping a fixed number of seconds.
+  wait_until 30 "feed rows rendered" ui_has "Balance Sheet" || note_fail "no feed rows rendered"
+  screencap screenshot-main.png
+  for tab in フィード Inbox 媒体 履歴 設定; do
+    ui_has "$tab" || note_fail "tab/button missing: $tab"
+  done
+}
+
+section_interact() {
+  # Open the first article: the WebView reader must come to the top.
+  tap_text "The Fed's Balance Sheet Is Shrinking in a New Way" || note_fail "could not tap first article"
+  wait_until 45 "ReaderActivity on top" top_is ReaderActivity || true
+  check_top ReaderActivity "article tap"
+  screencap screenshot-reader.png
+  adb shell input keyevent KEYCODE_BACK
+  wait_until 30 "back to MainActivity" top_is MainActivity || true
+
+  # Two-stage swipe, stage 1 (left, ~46% of width): the undo banner
+  # must show the applied action name (design §3).
+  dump_ui
+  local node bounds nums
+  node=$(grep -o 'text="Repo Fails Are Telling a Different Story This Month"[^>]*' window_dump.xml | head -1)
+  if [ -n "$node" ]; then
+    bounds=$(echo "$node" | grep -o 'bounds="\[[0-9,]*\]\[[0-9,]*\]"' | head -1)
+    nums=$(echo "$bounds" | grep -o '[0-9]\+'); set -- $nums
+    local cy=$(( ($2 + $4) / 2 ))
+    adb shell input swipe 1000 "$cy" 500 "$cy" 300
+    wait_until 20 "undo banner after swipe" ui_has "低評価" || note_fail "swipe banner not shown"
+    tap_text "取り消し" || true
+  else
+    echo "interact: swipe target row not visible; skipping swipe leg"
+  fi
+
+  # Tab round trip: Inbox -> Sources -> History -> Feed.
+  tap_text "Inbox" || note_fail "tap Inbox failed"
+  wait_until 20 "inbox renders" ui_has "Inboxは空です" || echo "note: inbox not empty or text differs"
+  tap_text "媒体" || note_fail "tap Sources failed"
+  wait_until 20 "sources render" ui_has "Fed Guy" || note_fail "sources list not rendered"
+  screencap screenshot-sources.png
+  tap_text "履歴" || note_fail "tap History failed"
+  wait_until 20 "history renders" ui_has "開いた" || echo "note: history has no open entry yet"
+  screencap screenshot-history.png
+  tap_text "フィード" || note_fail "tap Feed failed"
+  wait_until 20 "feed re-renders" ui_has "Balance Sheet" || note_fail "feed did not re-render"
+}
+
+section_settings() {
+  tap_text "設定" || note_fail "tap Settings failed"
+  wait_until 30 "SettingsActivity on top" top_is SettingsActivity || true
+  check_top SettingsActivity "settings button"
+  wait_until 20 "exploration setting renders" ui_has "探索割合" || note_fail "exploration share setting missing"
+  screencap screenshot-settings.png
+  adb shell input keyevent KEYCODE_BACK
+  wait_until 30 "back to MainActivity" top_is MainActivity || true
+}
+
+# --- main ------------------------------------------------------------------
+
+TEST_SECTIONS="${TEST_SECTIONS:-all}"
+RUN_FEED=0; RUN_INTERACT=0
+case "$TEST_SECTIONS" in
+  all) RUN_FEED=1; RUN_INTERACT=1 ;;
+  feed) RUN_FEED=1 ;;
+  interact) RUN_FEED=1; RUN_INTERACT=1 ;;
+  *) echo "unknown TEST_SECTIONS='$TEST_SECTIONS'; running all"; RUN_FEED=1; RUN_INTERACT=1 ;;
+esac
+echo "TEST_SECTIONS=$TEST_SECTIONS (feed=$RUN_FEED interact=$RUN_INTERACT)"
+
+adb root >/dev/null 2>&1 || true
+wait_until 15 "adb responsive" adb shell echo ok || true
+adb install -r "$APK" || note_fail "adb install failed"
+adb logcat -c || true
+
+if [ "$RUN_FEED" -eq 1 ]; then section_feed; fi
+if [ "$RUN_INTERACT" -eq 1 ]; then section_interact; section_settings; fi
+
+pid_alive || note_fail "process dead at end"
+adb logcat -d -v threadtime > logcat.txt 2>&1 || true
+if grep -q "FATAL EXCEPTION" logcat.txt && grep -A3 "FATAL EXCEPTION" logcat.txt | grep -q "$PKG"; then
+  note_fail "FATAL EXCEPTION for $PKG in logcat"
 fi
-if grep -q "FATAL EXCEPTION" logcat.txt; then
-  echo "FAIL: fatal exception in logcat"; grep -A5 "FATAL EXCEPTION" logcat.txt | head -20; fail=1
-fi
-# Feed rows come from FakeBackend in M1: at least one known mock title
-# must be visible in the window dump.
-if ! grep -qE "Fed|Hacker News|日銀|arXiv" window_dump.xml; then
-  echo "FAIL: no feed rows rendered"; fail=1
-fi
-# Bottom navigation must be present with all four tabs.
-for tab in フィード Inbox 媒体 履歴; do
-  if ! grep -q "$tab" window_dump.xml; then echo "FAIL: tab missing: $tab"; fail=1; fi
-done
-if [ "$fail" = 0 ]; then echo "LAUNCH TEST PASSED"; fi
-exit $fail
+echo "LAUNCH_TEST_FAIL=$FAIL"
+exit $FAIL

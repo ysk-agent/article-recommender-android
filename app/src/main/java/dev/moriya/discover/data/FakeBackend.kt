@@ -131,7 +131,35 @@ else -> {}
 }
 }
 
-override fun setSourceState(sourceId: String, state: SourceState) {
+private var exploration = 20
+    override fun explorationShare(): Int = exploration
+    override fun setExplorationShare(percent: Int) { exploration = percent.coerceIn(0, 50) }
+
+override fun correct(entry: HistoryEntry, newAction: SwipeAction) {
+        val type = when (newAction) {
+            SwipeAction.DISLIKE -> EventType.DISLIKE
+            SwipeAction.KNOWN -> EventType.KNOWN
+            SwipeAction.INBOX -> EventType.INBOX
+            SwipeAction.INBOX_HIGH -> EventType.INBOX_HIGH
+        }
+        postEvents(listOf(
+            AppEvent(UUID.randomUUID().toString(), EventType.CORRECTION,
+                System.currentTimeMillis(), entry.articleId, entry.sourceId,
+                supersedesEventId = entry.eventId),
+            AppEvent(UUID.randomUUID().toString(), type,
+                System.currentTimeMillis(), entry.articleId, entry.sourceId),
+        ))
+    }
+
+    override fun undo(event: AppEvent) {
+        postEvents(listOf(
+            AppEvent(UUID.randomUUID().toString(), EventType.UNDO,
+                System.currentTimeMillis(), event.articleId, event.sourceId,
+                supersedesEventId = event.id),
+        ))
+    }
+
+    override fun setSourceState(sourceId: String, state: SourceState) {
 val idx = sources.indexOfFirst { it.id == sourceId}
 if (idx >= 0) sources[idx] = sources[idx].copy(state = state)
 val type = when (state) {

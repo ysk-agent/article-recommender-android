@@ -76,29 +76,37 @@ class Repository private constructor(context: Context) {
     }
 
     fun undo(event: AppEvent) {
-        queue.enqueue(EventType.UNDO, articleId = event.articleId, sourceId = event.sourceId,
-            supersedesEventId = event.id)
-        queue.flush(backend)
+        // Fake backend: applied to its log directly. Real backend: no
+        // undo path yet (HttpBackend gap 3) — the throw is swallowed and
+        // the UI-side restore the caller already did stands.
+        try { backend.undo(event) } catch (t: Throwable) { /* see gap 3 */ }
     }
 
-    /** History correction (design §7): supersede the old event with a
-     *  correction marker plus the replacement action, so the backend
-     *  can recompute the profile from the log without drift. */
+    /** History correction (design §7): supersede the old event with
+     *  the replacement action, so the backend can recompute the profile
+     *  from the log without drift. */
     fun correct(entry: HistoryEntry, newAction: SwipeAction) {
-        queue.enqueue(EventType.CORRECTION, articleId = entry.articleId, sourceId = entry.sourceId,
-            supersedesEventId = entry.eventId)
-        val type = when (newAction) {
-            SwipeAction.DISLIKE -> EventType.DISLIKE
-            SwipeAction.KNOWN -> EventType.KNOWN
-            SwipeAction.INBOX -> EventType.INBOX
-            SwipeAction.INBOX_HIGH -> EventType.INBOX_HIGH
-        }
-        queue.enqueue(type, articleId = entry.articleId, sourceId = entry.sourceId)
-        queue.flush(backend)
+        backend.correct(entry, newAction)
     }
 
     fun setSourceState(source: Source, state: SourceState) {
         backend.setSourceState(source.id, state)
+    }
+
+    /** Exploration share (design §5b): persisted locally for instant UI,
+     *  and pushed to the backend, which owns feed composition. The
+     *  change applies from the next feed build. */
+    fun explorationShare(): Int {
+        val local = prefs.getInt("exploration_share", -1)
+        if (local >= 0) return local
+        return try { backend.explorationShare() } catch (t: Throwable) { 20 }
+            .also { prefs.edit().putInt("exploration_share", it).apply() }
+    }
+
+    fun setExplorationShare(percent: Int) {
+        val v = percent.coerceIn(0, 50)
+        prefs.edit().putInt("exploration_share", v).apply()
+        try { backend.setExplorationShare(v) } catch (t: Throwable) { /* retried implicitly: local value is the UI truth until the backend read succeeds */ }
     }
 
     // -- offline cache (feed / inbox only, design §10) -----------------

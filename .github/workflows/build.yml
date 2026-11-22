@@ -7,7 +7,7 @@ on:
       test_scope:
         description: "Emulator test scope (marker = read the [test: ...] marker from the HEAD commit message)"
         type: choice
-        options: [marker, all, none]
+        options: [marker, all, feed, interact, none]
         default: marker
 permissions:
   contents: read
@@ -26,12 +26,12 @@ jobs:
           SCOPE="${{ inputs.test_scope }}"
           if [ -z "$SCOPE" ] || [ "$SCOPE" = "marker" ]; then
             MSG=$(git log -1 --format=%B)
-            M=$(echo "$MSG" | grep -oE '\[test: (all|none)\]' | tail -1 | sed 's/\[test: //; s/\]//')
+            M=$(echo "$MSG" | grep -oE '\[test: (all|feed|interact|none)\]' | tail -1 | sed 's/\[test: //; s/\]//')
             SCOPE="${M:-all}"
           fi
           echo "test scope: $SCOPE"
           if [ "$SCOPE" = "none" ]; then echo "run_emulator=false" >> "$GITHUB_OUTPUT";
-          else echo "run_emulator=true" >> "$GITHUB_OUTPUT"; fi
+          else echo "run_emulator=true" >> "$GITHUB_OUTPUT"; echo "sections=$SCOPE" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -104,7 +104,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash ci/emulator-launch-test.sh
+          script: TEST_SECTIONS=${{ steps.scope.outputs.sections }} bash ci/emulator-launch-test.sh
       - name: Upload launch diagnostics
         if: always() && steps.scope.outputs.run_emulator == 'true'
         uses: actions/upload-artifact@v4
@@ -114,4 +114,8 @@ jobs:
             logcat.txt
             window_dump.xml
             screenshot-main.png
+            screenshot-reader.png
+            screenshot-sources.png
+            screenshot-history.png
+            screenshot-settings.png
           if-no-files-found: warn

@@ -1,8 +1,6 @@
 package dev.moriya.discover.ui
 
 import android.app.AlertDialog
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -108,12 +106,10 @@ abstract class ArticleListFragment : Fragment() {
     }
 
     protected fun openArticle(article: Article) {
-        repo.open(article)
-        // The reader is the system browser in M1; dwell / completion
-        // measurement on return arrives with the in-app reader in M2.
-        // The open event is recorded now (design §7: opened articles
-        // appear in History).
-        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(article.url)))
+        // Articles open in the in-app WebView reader (Yosuke, 2026-11-22).
+        // The OPEN event — with dwell and completion attached — is
+        // recorded by the reader when it closes (design §5, §7).
+        ReaderActivity.open(requireContext(), article)
     }
 }
 
@@ -180,7 +176,7 @@ class SourcesFragment : Fragment() {
         }
         scaffold.recycler.layoutManager = LinearLayoutManager(requireContext())
         scaffold.recycler.adapter = listAdapter
-        scaffold.footer.setOnLongClickListener { editBackendUrl(); true }
+        scaffold.footer.setOnClickListener { startActivity(SettingsActivity.intent(requireContext())) }
         refresh()
     }
 
@@ -200,21 +196,11 @@ class SourcesFragment : Fragment() {
         ))
         listAdapter.notifyDataSetChanged()
         val mode = if (repo.isFake()) "モックデータ" else repo.backendUrl()
-        scaffold.footer.text = "接続先: $mode（ここを長押しで変更）"
+        val info = requireContext().packageManager.getPackageInfo(requireContext().packageName, 0)
+        scaffold.footer.text = "Discover ${info.versionName} ・ 接続先: $mode（タップで設定）"
         scaffold.footer.visibility = View.VISIBLE
     }
 
-    private fun editBackendUrl() {
-        val input = EditText(requireContext()).apply {
-            setText(repo.backendUrl()); hint = "空欄 = モックデータ"
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle("バックエンド接続先")
-            .setView(input)
-            .setPositiveButton("保存") { _, _ -> repo.setBackendUrl(input.text.toString()); refresh() }
-            .setNegativeButton("キャンセル", null)
-            .show()
-    }
 }
 
 /** History tab (design §7): a correction screen, not just a log.

@@ -14,15 +14,20 @@ code change.
 ## Milestones
 
 - **M1 (current, v0.1.0)**: project skeleton, API boundary
-  (`BackendApi` / `FakeBackend` / `HttpBackend`), four tabs, YT
-  Client-style rows, two-stage swipe both directions with stage
-  labels/colours, haptics at the stage boundary and undo, long-press
-  source sheet, source page, history as a correction screen
-  (superseding events), on-device event queue with batch flush,
-  offline cache of feed/inbox.
-- M2: in-app reader with dwell/completion measurement, seen/impression
-  dwell rules (§4), settings screen (exploration share §5b, backend URL).
-- M3: real backend integration.
+  (`BackendApi` / `FakeBackend` / `HttpBackend` aligned with the real
+  backend's FastAPI contract), four tabs, YT Client-style rows,
+  two-stage swipe both directions with stage labels/colours, haptics
+  at the stage boundary and undo, long-press source sheet, source
+  page, history as a correction screen (superseding events),
+  on-device event queue with batch flush, offline cache of feed/inbox,
+  in-app WebView reader measuring dwell/completion (logged, not model
+  signals), and a settings screen (exploration share §5b, backend URL,
+  version). Thumbnails come from the backend's og:image
+  (`thumbnail_url`).
+- M2: seen/impression dwell rules (§4), reader polish.
+- M3: real backend integration on the tailnet host (known contract
+  gaps are listed in HttpBackend.kt: no unblock endpoint, no
+  /settings endpoint, no undo path).
 
 ## Build
 

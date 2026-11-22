@@ -3,7 +3,6 @@ package dev.moriya.discover.ui
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.Button
@@ -70,10 +69,7 @@ class SourceActivity : AppCompatActivity() {
         setContentView(rootFrame)
 
         adapter = ArticleAdapter(
-            onTap = { a ->
-                repo.open(a)
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(a.url)))
-            },
+            onTap = { a -> ReaderActivity.open(this, a) },
             onLongPress = { /* already on the source page */ },
             onSourceTap = { /* already on the source page */ },
         )

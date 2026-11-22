@@ -20,11 +20,15 @@ import kotlin.math.abs
  * pull-to-refresh model: distance alone never selects stage 2.
  *
  * - Past 18% of the row width, releasing applies stage 1.
- * - Past 55% the row is in the stage-2 zone: the stage-2 label shows
- *   dimmed. Holding there for ~0.45 s arms stage 2 — the label goes
- *   full-strength with a stronger haptic — and releasing then
- *   applies stage 2. Leaving the zone, or releasing before the hold
- *   completes, falls back to stage 1.
+ * - Past the stage-2 zone threshold (30% by default) the row is in
+ *   the stage-2 zone. While the hold is still progressing, the
+ *   display stays the stage-1 action's, but its colour blends
+ *   gradually toward the stage-2 colour (Yosuke, 2026-11-22) — the
+ *   blend is the progress meter. Holding for the full hold time
+ *   (400 ms by default) arms stage 2: the label switches to the
+ *   stage-2 action at full colour with a stronger haptic, and
+ *   releasing then applies stage 2. Leaving the zone, or releasing
+ *   before the hold completes, falls back to stage 1.
  *
  * History: v0.1.0 read the stage after the dismiss animation had run
  * the row off to 100%, so almost every swipe became stage 2.
@@ -51,8 +55,16 @@ class TwoStageSwipe(
 
     companion object {
         const val STAGE1 = 0.18f
-        const val STAGE2_ZONE = 0.55f
-        const val HOLD_MS = 450L
+        // Design defaults only — the live values come from
+        // DebugTuning (the temporary on-screen sliders).
+        const val STAGE2_ZONE = 0.30f
+        const val HOLD_MS = 400L
+
+        /** Linear RGB blend, t in [0,1]: the hold-progress colour. */
+        fun blend(a: Int, b: Int, t: Float): Int = Color.rgb(
+            (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
+            (Color.green(a) + (Color.green(b) - Color.green(a)) * t).toInt(),
+            (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).toInt())
 
         fun stageOf(fraction: Float): Int = if (fraction >= STAGE1) 1 else 0
 
@@ -146,20 +158,34 @@ class TwoStageSwipe(
             }
             releaseArmed = armed
 
-            // Display stage: 0 none, 1 = stage 1, 2 = stage 2 shown
-            // dimmed (in zone, not yet armed), 3 = stage 2 armed.
+            // Display stage: 0 none, 1 = stage 1 (in the zone, its
+            // colour blends toward the stage-2 colour as the hold
+            // progresses), 2 = stage 2 armed.
             val display = when {
                 fraction < STAGE1 || direction == 0 -> 0
-                armed -> 3
-                inZone -> 2
+                armed -> 2
                 else -> 1
             }
             if (display != lastStage && direction != 0 && fraction >= STAGE1) {
                 haptic(item, strong = false)
                 lastStage = display
             }
-            if (direction != 0) drawReveal(c, rv, item, dX, direction,
-                actionFor(direction, if (display >= 2) 2 else 1), dimmed = display == 2)
+            if (direction != 0 && fraction >= STAGE1) {
+                if (armed) {
+                    drawReveal(c, rv, item, dX, direction, actionFor(direction, 2), dimmed = false)
+                } else {
+                    val progress = if (inZone && zoneEnteredAt != 0L)
+                        ((SystemClock.uptimeMillis() - zoneEnteredAt).toFloat() / holdMs)
+                            .coerceIn(0f, 1f)
+                    else 0f
+                    val stage1 = actionFor(direction, 1)
+                    val stage2 = actionFor(direction, 2)
+                    val blended = if (stage1 != null && stage2 != null)
+                        blend(color(stage1), color(stage2), progress) else null
+                    drawReveal(c, rv, item, dX, direction, stage1,
+                        dimmed = false, colorOverride = blended)
+                }
+            }
         } else if (direction != 0 && releaseFraction >= STAGE1) {
             // Dismiss animation: keep showing the action that will be
             // applied, at full strength.
@@ -170,11 +196,12 @@ class TwoStageSwipe(
     }
 
     private fun drawReveal(c: Canvas, rv: RecyclerView, item: android.view.View,
-                           dX: Float, direction: Int, action: SwipeAction?, dimmed: Boolean) {
+                           dX: Float, direction: Int, action: SwipeAction?, dimmed: Boolean,
+                           colorOverride: Int? = null) {
         if (action == null) return
         val alpha = if (dimmed) 120 else 255
         val radius = rv.context.dp(16).toFloat()
-        val paint = Paint().apply { color = color(action); this.alpha = alpha; isAntiAlias = true }
+        val paint = Paint().apply { color = colorOverride ?: color(action); this.alpha = alpha; isAntiAlias = true }
         val rect = if (direction < 0)
             RectF(item.right + dX, item.top.toFloat(), item.right.toFloat(), item.bottom.toFloat())
         else

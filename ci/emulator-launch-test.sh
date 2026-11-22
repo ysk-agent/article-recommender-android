@@ -66,7 +66,7 @@ tap_text() {
 
 check_top() { # activity, description
   local top; top=$(top_activity); echo "top: $top"
-  if echo "$top" | grep -q "$PKG/.$1"; then echo "OK: $1 is top"; else note_fail "$1 not top ($2)"; fi
+  if top_is "$1"; then echo "OK: $1 is top"; else note_fail "$1 not top ($2)"; fi
 }
 
 ensure_main() {

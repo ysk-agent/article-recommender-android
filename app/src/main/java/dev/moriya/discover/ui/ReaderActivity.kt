@@ -10,7 +10,6 @@ import android.webkit.WebViewClient
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.WindowCompat
 import dev.moriya.discover.data.Article
 import dev.moriya.discover.data.Repository
 
@@ -34,11 +33,6 @@ class ReaderActivity : AppCompatActivity() {
 
     override fun onCreate(saved: Bundle?) {
         super.onCreate(saved)
-        // targetSdk 35 forces edge-to-edge on Android 15: without this,
-        // content slides under the status bar / action bar and the tab
-        // bar under the navigation bar (seen in the first CI run's
-        // screenshots). Classic fitted layout is what this app wants.
-        WindowCompat.setDecorFitsSystemWindows(window, true)
         articleId = intent.getStringExtra("articleId")
         sourceId = intent.getStringExtra("sourceId")
         val url = intent.getStringExtra("url")!!
@@ -65,8 +59,8 @@ class ReaderActivity : AppCompatActivity() {
             setBackgroundColor(Color.WHITE)
             addView(progress); addView(webView)
         }
+        applySystemBarInsets(root)
         setContentView(root)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         startedAt = System.currentTimeMillis()
         webView.loadUrl(url)
     }

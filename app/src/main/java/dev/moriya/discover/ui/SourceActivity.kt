@@ -9,7 +9,6 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.WindowCompat
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -36,11 +35,6 @@ class SourceActivity : AppCompatActivity() {
 
     override fun onCreate(saved: Bundle?) {
         super.onCreate(saved)
-        // targetSdk 35 forces edge-to-edge on Android 15: without this,
-        // content slides under the status bar / action bar and the tab
-        // bar under the navigation bar (seen in the first CI run's
-        // screenshots). Classic fitted layout is what this app wants.
-        WindowCompat.setDecorFitsSystemWindows(window, true)
         sourceId = intent.getStringExtra("sourceId")!!
 
         nameView = textView(sizeSp = 20f, bold = true)
@@ -72,6 +66,7 @@ class SourceActivity : AppCompatActivity() {
             addView(header); addView(recycler)
         }
         rootFrame = FrameLayout(this).apply { addView(column) }
+        applySystemBarInsets(rootFrame)
         setContentView(rootFrame)
 
         adapter = ArticleAdapter(

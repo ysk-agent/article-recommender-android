@@ -1,5 +1,6 @@
 package dev.moriya.discover
 
+import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.ViewGroup
@@ -7,7 +8,6 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
 import dev.moriya.discover.ui.FeedFragment
 import dev.moriya.discover.ui.HistoryFragment
@@ -30,11 +30,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(saved: Bundle?) {
         super.onCreate(saved)
-        // targetSdk 35 forces edge-to-edge on Android 15: without this,
-        // content slides under the status bar / action bar and the tab
-        // bar under the navigation bar (seen in the first CI run's
-        // screenshots). Classic fitted layout is what this app wants.
-        WindowCompat.setDecorFitsSystemWindows(window, true)
         container = FrameLayout(this).apply {
             id = CONTAINER_ID
             layoutParams = LinearLayout.LayoutParams(
@@ -56,10 +51,22 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f)
             setOnClickListener { startActivity(dev.moriya.discover.ui.SettingsActivity.intent(this@MainActivity)) }
         })
+        // NoActionBar theme (edge-to-edge under targetSdk 35 makes the
+        // AppCompat action bar overlay the content), so the app draws
+        // its own title bar, like the sibling apps draw their headers.
+        val titleBar = android.widget.TextView(this).apply {
+            text = "Discover"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#5D4037"))
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(container); addView(bar)
+            addView(titleBar); addView(container); addView(bar)
         }
+        dev.moriya.discover.ui.applySystemBarInsets(root)
         setContentView(root)
         if (saved == null) select(0)
     }

@@ -1,11 +1,13 @@
 package dev.moriya.discover.ui
 
 import android.content.Context
+import android.view.View
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
@@ -64,5 +66,16 @@ object UndoBar {
 
     fun toast(root: ViewGroup, message: String) {
         android.widget.Toast.makeText(root.context, message, android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** targetSdk 35 draws edge-to-edge: pad [root] by the system bars so
+ *  content never slides under the status bar or the navigation bar
+ *  (CI runs 1-2: rows under the action bar, tab bar under the nav bar). */
+fun applySystemBarInsets(root: View) {
+    ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+        insets
     }
 }

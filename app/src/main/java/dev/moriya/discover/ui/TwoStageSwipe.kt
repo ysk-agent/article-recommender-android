@@ -124,13 +124,18 @@ class TwoStageSwipe(
             // animation runs through this same callback and must not
             // rewrite the captured state.
             releaseFraction = fraction
-            val inZone = fraction >= STAGE2_ZONE && direction != 0
+            // Zone threshold and hold time come from the temporary
+            // debug tuning (DebugTuning), read live so the on-screen
+            // sliders apply to the very next swipe.
+            val zone = DebugTuning.zonePct(rv.context) / 100f
+            val holdMs = DebugTuning.holdMs(rv.context).toLong()
+            val inZone = fraction >= zone && direction != 0
             if (inZone) {
                 if (zoneEnteredAt == 0L) {
                     zoneEnteredAt = SystemClock.uptimeMillis()
                     startTicker(rv)
                 }
-                if (!armed && SystemClock.uptimeMillis() - zoneEnteredAt >= HOLD_MS) {
+                if (!armed && SystemClock.uptimeMillis() - zoneEnteredAt >= holdMs) {
                     armed = true
                     haptic(item, strong = true)
                 }

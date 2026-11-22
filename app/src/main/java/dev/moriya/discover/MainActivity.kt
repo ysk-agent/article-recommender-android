@@ -8,9 +8,11 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import dev.moriya.discover.ui.DebugTuning
 import dev.moriya.discover.ui.FeedFragment
 import dev.moriya.discover.ui.HistoryFragment
 import dev.moriya.discover.ui.InboxFragment
@@ -89,11 +91,60 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(colBg())
-            addView(titleBar); addView(container); addView(hairline); addView(bar)
+            addView(titleBar); addView(buildDebugBar()); addView(container); addView(hairline); addView(bar)
         }
         applySystemBarInsets(root)
         setContentView(root)
         if (saved == null) select(0)
+    }
+
+    /** TEMPORARY debug bar (v0.1.3): sliders for the swipe stage-2
+     *  zone threshold and the hold-to-arm duration, so the gesture
+     *  feel can be tuned on the device. Values persist via
+     *  DebugTuning and TwoStageSwipe reads them live. Remove with
+     *  DebugTuning once the feel is settled. */
+    private fun buildDebugBar(): LinearLayout {
+        fun sliderRow(label: String, initial: Int, min: Int, max: Int, step: Int,
+                      format: (Int) -> String, onSet: (Int) -> Unit): LinearLayout {
+            val valueView = TextView(this).apply {
+                text = format(initial); textSize = 12f; setTextColor(colText())
+                layoutParams = LinearLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            val seek = SeekBar(this).apply {
+                this.max = (max - min) / step
+                progress = (initial - min) / step
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                        val v = min + p * step
+                        valueView.text = format(v)
+                        if (fromUser) onSet(v)
+                    }
+                    override fun onStartTrackingTouch(sb: SeekBar?) {}
+                    override fun onStopTrackingTouch(sb: SeekBar?) {}
+                })
+            }
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                addView(TextView(this@MainActivity).apply {
+                    text = label; textSize = 12f; setTextColor(colTextSub())
+                    layoutParams = LinearLayout.LayoutParams(dp(104), ViewGroup.LayoutParams.WRAP_CONTENT)
+                })
+                addView(seek); addView(valueView)
+            }
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(colSurface())
+            setPadding(dp(16), dp(4), dp(16), dp(8))
+            addView(sliderRow("2段階目ゾーン", DebugTuning.zonePct(this@MainActivity),
+                DebugTuning.ZONE_MIN, DebugTuning.ZONE_MAX, 1,
+                { "$it%" }, { DebugTuning.setZonePct(this@MainActivity, it) }))
+            addView(sliderRow("ホールド時間", DebugTuning.holdMs(this@MainActivity),
+                DebugTuning.HOLD_MIN, DebugTuning.HOLD_MAX, DebugTuning.HOLD_STEP,
+                { "${it}ms" }, { DebugTuning.setHoldMs(this@MainActivity, it) }))
+        }
     }
 
     private fun select(index: Int) {

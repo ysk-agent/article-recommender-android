@@ -111,20 +111,36 @@ section_interact() {
   fi
   ensure_main
 
-  # Two-stage swipe, stage 1 (left, ~46% of width): the undo banner
-  # must show the applied action name (design §3).
+  # Two-stage swipe, exercised end to end on the first row (always
+  # visible). Controlled drags on the 1080px-wide emulator; the card
+  # row is ~1017px wide, so travel 432px ~= 42% (stage 1) and
+  # 818px ~= 80% (stage 2). The undo banner names the applied action,
+  # which is how the stage is verified. (The old leg targeted the
+  # 10th row, was never visible, and silently skipped every run —
+  # the swipe had never actually been tested.)
+  local cy=""
   dump_ui
-  local node bounds nums
-  node=$(grep -o 'text="Repo Fails Are Telling a Different Story This Month"[^>]*' window_dump.xml | head -1)
-  if [ -n "$node" ]; then
-    bounds=$(echo "$node" | grep -o 'bounds="\[[0-9,]*\]\[[0-9,]*\]"' | head -1)
-    nums=$(echo "$bounds" | grep -o '[0-9]\+'); set -- $nums
-    local cy=$(( ($2 + $4) / 2 ))
-    adb shell input swipe 1000 "$cy" 500 "$cy" 300
-    wait_until 10 "undo banner after swipe" ui_has "低評価" || note_fail "swipe banner not shown"
-    tap_text "取り消し" || true
+  local fnode=$(grep -o "text=\"The Fed's Balance Sheet Is Shrinking in a New Way\"[^>]*" window_dump.xml | head -1)
+  if [ -n "$fnode" ]; then
+    local fb=$(echo "$fnode" | grep -o 'bounds="\[[0-9,]*\]\[[0-9,]*\]"' | head -1)
+    local fn=$(echo "$fb" | grep -o '[0-9]\+'); set -- $fn
+    cy=$(( ($2 + $4) / 2 ))
+  fi
+  if [ -n "$cy" ]; then
+    echo "swipe leg: row centre y=$cy"
+    adb shell input swipe 918 "$cy" 486 "$cy" 300
+    wait_until 10 "stage-1 banner" ui_has "低評価" || note_fail "stage-1 swipe did not apply dislike"
+    tap_text "取り消し" || note_fail "stage-1 undo tap failed"
+    sleep 1
+    adb shell input swipe 918 "$cy" 100 "$cy" 300
+    wait_until 10 "stage-2 banner" ui_has "もう知っている" || note_fail "stage-2 swipe did not apply known"
+    tap_text "取り消し" || note_fail "stage-2 undo tap failed"
+    sleep 1
+    adb shell input swipe 162 "$cy" 594 "$cy" 300
+    wait_until 10 "right stage-1 banner" ui_has "Inboxへ" || note_fail "right stage-1 swipe did not apply inbox"
+    tap_text "取り消し" || note_fail "right stage-1 undo tap failed"
   else
-    echo "interact: swipe target row not visible; skipping swipe leg"
+    note_fail "swipe target row not found"
   fi
 
   # Tab round trip: Inbox -> Sources -> History -> Feed.

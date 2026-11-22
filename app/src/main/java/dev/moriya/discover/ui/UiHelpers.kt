@@ -44,7 +44,7 @@ object UndoBar {
         val label = ctx.textView(message, 14f, color = Color.WHITE).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val button = Button(ctx).apply {
+        val button = Button(ctx).apply { isAllCaps = false;
             text = undoLabel
             setTextColor(Color.rgb(144, 202, 249))
             setBackgroundColor(Color.TRANSPARENT)

@@ -53,13 +53,21 @@ tap_text() {
   set -- $nums
   [ $# -eq 4 ] || return 1
   local cx=$(( ($1 + $3) / 2 )) cy=$(( ($2 + $4) / 2 ))
-  echo "tap_text: '$1' at $cx,$cy"
+  echo "tap_text bounds=[$1,$2][$3,$4] -> $cx,$cy"
   adb shell input tap "$cx" "$cy"
 }
 
 check_top() { # activity, description
   local top; top=$(top_activity); echo "top: $top"
   if echo "$top" | grep -q "$PKG/.$1"; then echo "OK: $1 is top"; else note_fail "$1 not top ($2)"; fi
+}
+
+ensure_main() {
+  if ! top_is MainActivity; then
+    echo "ensure_main: relaunching MainActivity"
+    adb shell am start -W -n "$PKG/.MainActivity" >/dev/null 2>&1 || true
+    wait_until 30 "MainActivity on top" top_is MainActivity || true
+  fi
 }
 
 # --- sections ------------------------------------------------------------
@@ -79,13 +87,17 @@ section_feed() {
 }
 
 section_interact() {
+  ensure_main
   # Open the first article: the WebView reader must come to the top.
   tap_text "The Fed's Balance Sheet Is Shrinking in a New Way" || note_fail "could not tap first article"
   wait_until 45 "ReaderActivity on top" top_is ReaderActivity || true
   check_top ReaderActivity "article tap"
   screencap screenshot-reader.png
-  adb shell input keyevent KEYCODE_BACK
-  wait_until 30 "back to MainActivity" top_is MainActivity || true
+  if top_is ReaderActivity; then
+    adb shell input keyevent KEYCODE_BACK
+    wait_until 30 "back to MainActivity" top_is MainActivity || true
+  fi
+  ensure_main
 
   # Two-stage swipe, stage 1 (left, ~46% of width): the undo banner
   # must show the applied action name (design §3).
@@ -117,12 +129,13 @@ section_interact() {
 }
 
 section_settings() {
+  ensure_main
   tap_text "設定" || note_fail "tap Settings failed"
   wait_until 30 "SettingsActivity on top" top_is SettingsActivity || true
   check_top SettingsActivity "settings button"
   wait_until 20 "exploration setting renders" ui_has "探索割合" || note_fail "exploration share setting missing"
   screencap screenshot-settings.png
-  adb shell input keyevent KEYCODE_BACK
+  if top_is SettingsActivity; then adb shell input keyevent KEYCODE_BACK; fi
   wait_until 30 "back to MainActivity" top_is MainActivity || true
 }
 

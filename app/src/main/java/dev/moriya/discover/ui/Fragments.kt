@@ -232,7 +232,7 @@ class HistoryFragment : Fragment() {
         entries = repo.history()
         rows.clear()
         for (e in entries) rows.add(Triple(
-            label(e.type) + if (e.supersededBy != null) "（訂正済み）" else "",
+            label(e.type) + if (e.supersededBy != null) "（取り消し済み）" else "",
             e.articleTitle ?: e.sourceName ?: "",
             listOfNotNull(
                 e.sourceName, TimeFmt.dateTime(e.timestampEpochMs),

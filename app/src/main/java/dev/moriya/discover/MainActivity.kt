@@ -7,6 +7,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
 import dev.moriya.discover.ui.FeedFragment
 import dev.moriya.discover.ui.HistoryFragment
@@ -29,6 +30,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(saved: Bundle?) {
         super.onCreate(saved)
+        // targetSdk 35 forces edge-to-edge on Android 15: without this,
+        // content slides under the status bar / action bar and the tab
+        // bar under the navigation bar (seen in the first CI run's
+        // screenshots). Classic fitted layout is what this app wants.
+        WindowCompat.setDecorFitsSystemWindows(window, true)
         container = FrameLayout(this).apply {
             id = CONTAINER_ID
             layoutParams = LinearLayout.LayoutParams(
@@ -36,7 +42,7 @@ class MainActivity : AppCompatActivity() {
         }
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         tabs.forEachIndexed { index, (label, _) ->
-            val btn = Button(this).apply {
+            val btn = Button(this).apply { isAllCaps = false;
                 text = label
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener { select(index) }
@@ -45,7 +51,7 @@ class MainActivity : AppCompatActivity() {
         }
         // Settings is a separate screen, not a fifth tab (design §2
         // fixes four tabs); its button sits at the end of the tab bar.
-        bar.addView(Button(this).apply {
+        bar.addView(Button(this).apply { isAllCaps = false;
             text = "設定"
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.7f)
             setOnClickListener { startActivity(dev.moriya.discover.ui.SettingsActivity.intent(this@MainActivity)) }

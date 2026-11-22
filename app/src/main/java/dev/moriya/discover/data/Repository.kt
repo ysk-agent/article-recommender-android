@@ -49,6 +49,19 @@ class Repository private constructor(context: Context) {
     fun sourceArticles(id: String): List<Article> = backend.sourceArticles(id)
     fun history(): List<HistoryEntry> = backend.history()
 
+    /** Client event id -> server event id, captured from /events
+     *  responses. Undo against the real backend needs the server id
+     *  (POST /history/{id}/undo); the fake's ids are its own. */
+    private val serverIdMap = mutableMapOf<String, String>()
+
+    private fun flushQueue() {
+        val batch = queue.flush(backend)
+        val ids = queue.lastServerIds
+        if (batch.size == ids.size) {
+            batch.zip(ids).forEach { (e, sid) -> serverIdMap[e.id] = sid }
+        }
+    }
+
     // -- user actions: record the event, flush, let UI refresh --------
     fun swipe(article: Article, action: SwipeAction): AppEvent {
         val type = when (action) {
@@ -58,28 +71,26 @@ class Repository private constructor(context: Context) {
             SwipeAction.INBOX_HIGH -> EventType.INBOX_HIGH
         }
         val e = queue.enqueue(type, articleId = article.id, sourceId = article.sourceId)
-        queue.flush(backend)
+        flushQueue()
         return e
     }
 
     fun open(article: Article, dwellMs: Long? = null, completionRate: Double? = null): AppEvent {
         val e = queue.enqueue(EventType.OPEN, articleId = article.id, sourceId = article.sourceId,
             dwellMs = dwellMs, completionRate = completionRate)
-        queue.flush(backend)
+        flushQueue()
         return e
     }
 
     fun impression(article: Article) {
         // Impressions are aggregate-only: queued, never shown in History.
         queue.enqueue(EventType.IMPRESSION, articleId = article.id, sourceId = article.sourceId)
-        queue.flush(backend)
+        flushQueue()
     }
 
     fun undo(event: AppEvent) {
-        // Fake backend: applied to its log directly. Real backend: no
-        // undo path yet (HttpBackend gap 3) — the throw is swallowed and
-        // the UI-side restore the caller already did stands.
-        try { backend.undo(event) } catch (t: Throwable) { /* see gap 3 */ }
+        val target = serverIdMap[event.id]?.let { event.copy(id = it) } ?: event
+        try { backend.undo(target) } catch (t: Throwable) { /* event may predate this session; UI restore already applied */ }
     }
 
     /** History correction (design §7): supersede the old event with
@@ -90,7 +101,7 @@ class Repository private constructor(context: Context) {
     }
 
     fun setSourceState(source: Source, state: SourceState) {
-        backend.setSourceState(source.id, state)
+        backend.setSourceState(source, state)
     }
 
     /** Exploration share (design §5b): persisted locally for instant UI,

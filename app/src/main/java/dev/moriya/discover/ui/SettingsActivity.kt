@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import dev.moriya.discover.data.Repository
 
 /**
@@ -30,6 +31,11 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(saved: Bundle?) {
         super.onCreate(saved)
+        // targetSdk 35 forces edge-to-edge on Android 15: without this,
+        // content slides under the status bar / action bar and the tab
+        // bar under the navigation bar (seen in the first CI run's
+        // screenshots). Classic fitted layout is what this app wants.
+        WindowCompat.setDecorFitsSystemWindows(window, true)
         title = "設定"
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
@@ -79,7 +85,7 @@ class SettingsActivity : AppCompatActivity() {
             layoutParams = matchWrap()
         }
         column.addView(urlInput)
-        val saveBtn = Button(this).apply {
+        val saveBtn = Button(this).apply { isAllCaps = false;
             text = "接続先を保存"
             layoutParams = matchWrap()
             setOnClickListener {

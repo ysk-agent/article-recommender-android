@@ -3,12 +3,17 @@ package dev.moriya.discover.data
 import java.util.UUID
 
 /**
-* In-memory fake of the Python backend, for developing the app before
-* (and independently of) the real service. Holds mutable state so
-* swipes, follow/block and history corrections behave end-to-end
-* exactly as they will against the real API: every user action is an
-* appended event, and history corrections supersede earlier events
-* instead of editing them (event sourcing, design §7).
+* In-memory fake of the Python backend, implementing the final
+* contract (~/workspace/discover-recommender/CONTRACT.md, 2026-11-22)
+* so mock and real behaviour do not drift:
+* - events are append-only; undo annuls its target, a correction
+* retargets its target's effective type (the target stays in
+* effect, superseded_by == null), meta events never list in history;
+* - history returns all explicit + open events, including annulled
+* ones with superseded_by set;
+* - reaching NEUTRAL from BLOCKED is unblock, from FOLLOWING unfollow;
+* - exploration share is a percent at this boundary (the wire format
+* converts to the exploration_rate fraction in HttpBackend).
 */
 class FakeBackend: BackendApi {
 
@@ -78,25 +83,35 @@ override fun sourceArticles(sourceId: String): List<Article> =
 articles.filter { it.sourceId == sourceId}.sortedByDescending { it.publishedAtEpochMs}
 
 override fun history(): List<HistoryEntry> {
-val superseded = eventLog.mapNotNull { it.supersedesEventId}.toSet()
+val annulledBy = mutableMapOf<String, String>()
+val retarget = mutableMapOf<String, EventType>()
+for (e in eventLog) {
+val target = e.supersedesEventId?: continue
+when (e.type) {
+EventType.UNDO -> annulledBy[target] = e.id
+EventType.CORRECTION -> e.newType?.let { retarget[target] = it}
+else -> {}
+}
+}
 return eventLog
-.filter { it.type!= EventType.IMPRESSION && it.type!= EventType.SEEN}
+.filter { it.type!= EventType.IMPRESSION && it.type!= EventType.SEEN &&
+it.type!= EventType.UNDO && it.type!= EventType.CORRECTION}
 .sortedByDescending { it.timestampEpochMs}
 .map { e ->
 HistoryEntry(
 eventId = e.id,
-type = e.type,
+type = retarget[e.id]?: e.type,
 articleId = e.articleId,
 articleTitle = e.articleId?.let { titlesById[it]},
 sourceId = e.sourceId,
 sourceName = e.sourceId?.let { sourceNameById[it]},
 timestampEpochMs = e.timestampEpochMs,
-supersededBy = if (e.id in superseded) "superseded" else null,
+supersededBy = annulledBy[e.id],
 )
 }
 }
 
-override fun postEvents(events: List<AppEvent>) {
+override fun postEvents(events: List<AppEvent>): List<String> {
 for (e in events) {
 eventLog.add(e)
 when (e.type) {
@@ -107,6 +122,7 @@ EventType.CORRECTION -> applyCorrection(e)
 else -> {}
 }
 }
+return events.map { it.id}
 }
 
 private fun applyUndo(undo: AppEvent) {
@@ -119,54 +135,57 @@ else -> {}
 }
 
 private fun applyCorrection(correction: AppEvent) {
-// The correction event's own type field carries the semantic in
-// History UI (see Repository.correct): for the fake backend we
-// encode the new action in the note via a paired event appended
-// by the repository, so here we only revert the old effect.
 val target = eventLog.firstOrNull { it.id == correction.supersedesEventId}?: return
 when (target.type) {
 EventType.DISLIKE, EventType.KNOWN -> target.articleId?.let { removedFromFeed.remove(it)}
 EventType.INBOX, EventType.INBOX_HIGH -> target.articleId?.let { inboxIds.remove(it)}
 else -> {}
 }
+when (correction.newType) {
+EventType.DISLIKE, EventType.KNOWN -> target.articleId?.let { removedFromFeed.add(it)}
+EventType.INBOX, EventType.INBOX_HIGH -> target.articleId?.let { inboxIds.add(it)}
+else -> {}
+}
+}
+
+override fun correct(entry: HistoryEntry, newAction: SwipeAction) {
+// Contract form 2: one correction event naming its target and
+// new_type; the target stays in effect under the new type.
+val type = when (newAction) {
+SwipeAction.DISLIKE -> EventType.DISLIKE
+SwipeAction.KNOWN -> EventType.KNOWN
+SwipeAction.INBOX -> EventType.INBOX
+SwipeAction.INBOX_HIGH -> EventType.INBOX_HIGH
+}
+postEvents(listOf(
+AppEvent(UUID.randomUUID().toString(), EventType.CORRECTION,
+System.currentTimeMillis(), entry.articleId, entry.sourceId,
+supersedesEventId = entry.eventId, newType = type),
+))
+}
+
+override fun undo(event: AppEvent) {
+postEvents(listOf(
+AppEvent(UUID.randomUUID().toString(), EventType.UNDO,
+System.currentTimeMillis(), event.articleId, event.sourceId,
+supersedesEventId = event.id),
+))
 }
 
 private var exploration = 20
-    override fun explorationShare(): Int = exploration
-    override fun setExplorationShare(percent: Int) { exploration = percent.coerceIn(0, 50) }
+override fun explorationShare(): Int = exploration
+override fun setExplorationShare(percent: Int) { exploration = percent.coerceIn(0, 50)}
 
-override fun correct(entry: HistoryEntry, newAction: SwipeAction) {
-        val type = when (newAction) {
-            SwipeAction.DISLIKE -> EventType.DISLIKE
-            SwipeAction.KNOWN -> EventType.KNOWN
-            SwipeAction.INBOX -> EventType.INBOX
-            SwipeAction.INBOX_HIGH -> EventType.INBOX_HIGH
-        }
-        postEvents(listOf(
-            AppEvent(UUID.randomUUID().toString(), EventType.CORRECTION,
-                System.currentTimeMillis(), entry.articleId, entry.sourceId,
-                supersedesEventId = entry.eventId),
-            AppEvent(UUID.randomUUID().toString(), type,
-                System.currentTimeMillis(), entry.articleId, entry.sourceId),
-        ))
-    }
-
-    override fun undo(event: AppEvent) {
-        postEvents(listOf(
-            AppEvent(UUID.randomUUID().toString(), EventType.UNDO,
-                System.currentTimeMillis(), event.articleId, event.sourceId,
-                supersedesEventId = event.id),
-        ))
-    }
-
-    override fun setSourceState(sourceId: String, state: SourceState) {
-val idx = sources.indexOfFirst { it.id == sourceId}
+override fun setSourceState(source: Source, state: SourceState) {
+val idx = sources.indexOfFirst { it.id == source.id}
 if (idx >= 0) sources[idx] = sources[idx].copy(state = state)
 val type = when (state) {
 SourceState.FOLLOWING -> EventType.FOLLOW
 SourceState.BLOCKED -> EventType.BLOCK
-SourceState.NEUTRAL -> EventType.UNBLOCK
+// Vocabulary preserves how neutral was reached (contract).
+SourceState.NEUTRAL ->
+if (source.state == SourceState.BLOCKED) EventType.UNBLOCK else EventType.UNFOLLOW
 }
-eventLog.add(AppEvent(UUID.randomUUID().toString(), type, System.currentTimeMillis(), sourceId = sourceId))
+eventLog.add(AppEvent(UUID.randomUUID().toString(), type, System.currentTimeMillis(), sourceId = source.id))
 }
 }

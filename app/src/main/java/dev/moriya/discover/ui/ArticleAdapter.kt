@@ -82,11 +82,14 @@ class ArticleAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val a = items[position]
         holder.title.text = a.title
-        holder.meta.text = "${a.sourceName} ・ ${TimeFmt.elapsed(a.publishedAtEpochMs)} ・ ${a.topic}" +
+        holder.meta.text = listOfNotNull(
+            a.sourceName, TimeFmt.elapsed(a.publishedAtEpochMs),
+            a.topic.ifEmpty { null },
             when (a.slotType) {
-                SlotType.EXPLORE_NEAR, SlotType.EXPLORE_FAR -> " ・ 新しい話題"
-                else -> ""
-            }
+                SlotType.EXPLORE_NEAR, SlotType.EXPLORE_FAR -> "新しい話題"
+                else -> null
+            },
+        ).joinToString(" ・ ")
         holder.sourceLink.text = a.sourceName
         holder.thumb.setImageBitmap(null)
         holder.thumb.setBackgroundColor(thumbColor(a.sourceId))

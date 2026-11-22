@@ -51,7 +51,10 @@ data class HistoryEntry(
     val sourceId: String?,
     val sourceName: String?,
     val timestampEpochMs: Long,
-    /** Set when this entry was superseded by a correction event. */
+    /** Id of the event that took this entry out of effect (undo or
+     *  replacement); null while the entry is in effect. An entry whose
+     *  type was changed by a correction stays in effect under its new
+     *  type and has supersededBy == null (final contract, 2026-11-22). */
     val supersededBy: String? = null,
     val note: String? = null,
 )
@@ -79,6 +82,9 @@ data class AppEvent(
     val articleId: String? = null,
     val sourceId: String? = null,
     val supersedesEventId: String? = null,
+    /** On a CORRECTION event: the type the target effectively becomes
+     *  (contract: correction carries payload.new_type). */
+    val newType: EventType? = null,
     val dwellMs: Long? = null,
     val completionRate: Double? = null,
     val usedAsModelSignal: Boolean = false,

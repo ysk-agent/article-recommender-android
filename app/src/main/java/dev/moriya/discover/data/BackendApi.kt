@@ -25,8 +25,12 @@ interface BackendApi {
     fun sources(): List<Source>
     fun sourceArticles(sourceId: String): List<Article>
     fun history(): List<HistoryEntry>
-    fun postEvents(events: List<AppEvent>)
-    fun setSourceState(sourceId: String, state: SourceState)
+    /** Posts a batch; returns the backend's event ids in batch order
+     *  (the fake returns the client ids, which are its own ids). */
+    fun postEvents(events: List<AppEvent>): List<String>
+    /** [source] carries the current state: reaching NEUTRAL from
+     *  BLOCKED is unblock, from FOLLOWING is unfollow (contract). */
+    fun setSourceState(source: Source, state: SourceState)
     /** History correction (design §7): supersede the entry's event with
      *  the replacement action. The real backend exposes this as
      *  POST /history/{id}/correct; the fake applies it to its log. */

@@ -27,7 +27,8 @@ class EventQueue(context: Context) {
                 supersedesEventId: String? = null, dwellMs: Long? = null,
                 completionRate: Double? = null): AppEvent {
         val e = AppEvent(UUID.randomUUID().toString(), type, System.currentTimeMillis(),
-            articleId, sourceId, supersedesEventId, dwellMs, completionRate)
+            articleId = articleId, sourceId = sourceId, supersedesEventId = supersedesEventId,
+            dwellMs = dwellMs, completionRate = completionRate)
         pending.add(e)
         file.appendText(encode(e) + "\n")
         return e
@@ -35,11 +36,15 @@ class EventQueue(context: Context) {
 
     fun pendingCount(): Int = pending.size
 
+    /** Server-side ids assigned by the last flush, in batch order. */
+    var lastServerIds: List<String> = emptyList()
+        private set
+
     /** Returns the flushed batch, or empty if the backend rejected it. */
     fun flush(backend: BackendApi): List<AppEvent> {
         if (pending.isEmpty()) return emptyList()
         val batch = pending.toList()
-        backend.postEvents(batch)
+        lastServerIds = backend.postEvents(batch)
         pending.clear()
         file.writeText("")
         return batch

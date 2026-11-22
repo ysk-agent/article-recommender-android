@@ -25,9 +25,9 @@ class SourceSheet : DialogFragment() {
 
         val nameView = ctx.textView(sourceName, 17f, bold = true)
         val stateView = ctx.textView(sizeSp = 13f).apply { setPadding(0, ctx.dp(4), 0, 0) }
-        val followBtn = Button(ctx).apply { layoutParams = matchWrap(ctx, top = 12) }
-        val blockBtn = Button(ctx).apply { layoutParams = matchWrap(ctx, top = 6) }
-        val openBtn = Button(ctx).apply {
+        val followBtn = Button(ctx).apply { isAllCaps = false; layoutParams = matchWrap(ctx, top = 12) }
+        val blockBtn = Button(ctx).apply { isAllCaps = false; layoutParams = matchWrap(ctx, top = 6) }
+        val openBtn = Button(ctx).apply { isAllCaps = false;
             text = "媒体ページを開く"; layoutParams = matchWrap(ctx, top = 6)
         }
         val root = LinearLayout(ctx).apply {

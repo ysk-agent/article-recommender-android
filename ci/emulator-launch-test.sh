@@ -18,7 +18,11 @@ PKG=dev.moriya.discover
 FAIL=0
 note_fail() { echo "LAUNCH-TEST FAILURE: $1"; FAIL=1; }
 top_activity() { adb shell dumpsys activity activities 2>/dev/null | grep "topResumedActivity" | head -1; }
-top_is() { top_activity | grep -q "$PKG/.$1"; }
+# Match the short class name on the topResumedActivity line only.
+# (ReaderActivity/SettingsActivity live in the .ui subpackage, so a
+# "$PKG/.$1" component pattern never matches them — CI run 3 polled
+# 45s for a reader that was already on top.)
+top_is() { top_activity | grep -q "$1"; }
 pid_alive() { [ -n "$(adb shell pidof $PKG 2>/dev/null | tr -d '\r\n')" ]; }
 
 wait_until() {
@@ -66,7 +70,12 @@ ensure_main() {
   if ! top_is MainActivity; then
     echo "ensure_main: relaunching MainActivity"
     adb shell am start -W -n "$PKG/.MainActivity" >/dev/null 2>&1 || true
-    wait_until 30 "MainActivity on top" top_is MainActivity || true
+    if ! wait_until 15 "MainActivity on top" top_is MainActivity; then
+      echo "ensure_main: force-stop + relaunch"
+      adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
+      adb shell am start -W -n "$PKG/.MainActivity" >/dev/null 2>&1 || true
+      wait_until 30 "MainActivity on top after relaunch" top_is MainActivity || true
+    fi
   fi
 }
 
